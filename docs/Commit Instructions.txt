@@ -1,0 +1,161 @@
+When generating commit messages, you MUST follow the **Conventional Commits 1.0.0** specification
+AND you MUST prepend an appropriate emoji to the commit header.
+
+---
+
+# 🧱 Commit Message Structure (REQUIRED)
+
+```
+<emoji> <type>[optional scope][optional !]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+✅ There MUST be:
+
+* An emoji
+* A single space
+* Then the Conventional Commit header
+
+---
+
+# 🎯 Emoji Mapping (RECOMMENDED STANDARD)
+
+| Type            | Emoji | Meaning                 | SemVer Impact |
+| --------------- | ----- | ----------------------- | ------------- |
+| `feat`          | ✨     | New feature             | MINOR         |
+| `fix`           | 🐛    | Bug fix                 | PATCH         |
+| `docs`          | 📝    | Documentation           | None          |
+| `style`         | 🎨    | Code style / formatting | None          |
+| `refactor`      | ♻️    | Code refactor           | None          |
+| `perf`          | ⚡     | Performance improvement | None          |
+| `test`          | ✅     | Tests                   | None          |
+| `build`         | 📦    | Build system / deps     | None          |
+| `ci`            | 👷    | CI config               | None          |
+| `chore`         | 🔧    | Maintenance             | None          |
+| `revert`        | ⏪     | Revert commit           | Depends       |
+| Breaking change | 💥    | Breaking change         | MAJOR         |
+
+---
+
+# 🚨 Breaking Changes
+
+Breaking changes MUST be indicated in one of the following ways:
+
+### Option A — `!` in header
+
+```
+💥 feat!: remove legacy API
+✨ feat(api)!: change authentication flow
+```
+
+### Option B — Footer
+
+```
+✨ feat: update config system
+
+BREAKING CHANGE: config keys have been renamed
+```
+
+Rules:
+
+* `BREAKING CHANGE` MUST be uppercase.
+* If `!` is used, footer MAY be omitted.
+* Breaking changes trigger a MAJOR version bump.
+
+---
+
+# 🧾 Description (REQUIRED)
+
+* MUST follow `: `
+* MUST be concise
+* Example:
+
+```
+🐛 fix: resolve null pointer in login handler
+```
+
+---
+
+# 📄 Body (OPTIONAL)
+
+* MUST start one blank line after description.
+* Can include multiple paragraphs.
+
+Example:
+
+```
+🐛 fix: prevent race condition in payment service
+
+Introduce request locking to prevent duplicate transaction
+processing under high concurrency.
+```
+
+---
+
+# 🏷 Footers (OPTIONAL)
+
+Must start one blank line after body.
+
+Format:
+
+```
+Token: value
+```
+
+Examples:
+
+```
+Reviewed-by: Prince
+Refs: #123
+```
+
+Rules:
+
+* Footer tokens MUST use hyphens instead of spaces.
+* `BREAKING CHANGE` is the only allowed space-containing token.
+
+---
+
+# 📦 SemVer Mapping
+
+| Condition                              | Version Bump |
+| -------------------------------------- | ------------ |
+| `fix`                                  | PATCH        |
+| `feat`                                 | MINOR        |
+| Any commit with BREAKING CHANGE or `!` | MAJOR        |
+
+---
+
+# 🤖 AI Enforcement Rules
+
+When generating commit messages:
+
+* ALWAYS prepend a relevant emoji.
+* ALWAYS include `<type>: <description>`.
+* NEVER omit the colon + space.
+* ALWAYS correctly format blank lines.
+* ALWAYS mark breaking changes properly.
+* NEVER generate non-conforming messages.
+
+---
+
+# ✅ Example Commits
+
+```
+✨ feat(auth): add OAuth2 login support
+```
+
+```
+🐛 fix(payment): resolve duplicate charge issue
+
+Added idempotency key validation.
+
+Refs: #221
+```
+
+```
+💥 feat!: remove support for Node 16
+```
