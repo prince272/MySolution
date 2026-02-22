@@ -22,10 +22,57 @@ namespace MySolution.WebApi.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("MySolution.WebApi.Libraries.JwtToken.JwtToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AccessTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AccessTokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("RefreshTokenExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Scheme")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccessTokenExpiresAt");
+
+                    b.HasIndex("AccessTokenHash");
+
+                    b.HasIndex("RefreshTokenExpiresAt");
+
+                    b.HasIndex("RefreshTokenHash");
+
+                    b.HasIndex("Subject");
+
+                    b.ToTable("JwtTokens", (string)null);
+                });
+
             modelBuilder.Entity("MySolution.WebApi.Services.Identity.Entities.Role", b =>
                 {
-                    b.Property<string>("Id")
-                        .HasColumnType("text");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
@@ -44,8 +91,9 @@ namespace MySolution.WebApi.Data.Migrations
 
             modelBuilder.Entity("MySolution.WebApi.Services.Identity.Entities.User", b =>
                 {
-                    b.Property<string>("Id")
-                        .HasColumnType("text");
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Bio")
                         .HasColumnType("text");
@@ -53,13 +101,13 @@ namespace MySolution.WebApi.Data.Migrations
                     b.Property<string>("Country")
                         .HasColumnType("text");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateOnly?>("DateOfBirth")
                         .HasColumnType("date");
 
-                    b.Property<DateTime?>("DeletedAt")
+                    b.Property<DateTimeOffset?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Email")
@@ -78,11 +126,17 @@ namespace MySolution.WebApi.Data.Migrations
                     b.Property<bool>("HasPassword")
                         .HasColumnType("boolean");
 
+                    b.Property<DateTimeOffset>("LastActiveAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("LastName")
                         .HasColumnType("text");
 
                     b.Property<string>("Locale")
                         .HasColumnType("text");
+
+                    b.Property<DateTimeOffset?>("PasswordChangedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
@@ -93,11 +147,13 @@ namespace MySolution.WebApi.Data.Migrations
                     b.Property<bool>("PhoneNumberVerified")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("SecurityStamp")
-                        .IsRequired()
+                    b.Property<string>("PictureUrl")
                         .HasColumnType("text");
 
-                    b.Property<DateTime?>("UpdatedAt")
+                    b.Property<Guid>("SecurityStamp")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("UserName")
@@ -107,12 +163,10 @@ namespace MySolution.WebApi.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Email")
-                        .IsUnique()
-                        .HasFilter("[Email] IS NOT NULL");
+                        .IsUnique();
 
                     b.HasIndex("PhoneNumber")
-                        .IsUnique()
-                        .HasFilter("[PhoneNumber] IS NOT NULL");
+                        .IsUnique();
 
                     b.HasIndex("UserName")
                         .IsUnique();
@@ -122,11 +176,11 @@ namespace MySolution.WebApi.Data.Migrations
 
             modelBuilder.Entity("RoleUser", b =>
                 {
-                    b.Property<string>("RolesId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("RolesId")
+                        .HasColumnType("uuid");
 
-                    b.Property<string>("UsersId")
-                        .HasColumnType("text");
+                    b.Property<Guid>("UsersId")
+                        .HasColumnType("uuid");
 
                     b.HasKey("RolesId", "UsersId");
 

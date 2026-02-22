@@ -1,14 +1,55 @@
+using FluentValidation;
+using Mapster;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MySolution.WebApi.Data;
+using MySolution.WebApi.Endpoints;
+using MySolution.WebApi.Extensions;
+using MySolution.WebApi.Libraries.Globalizer;
+using MySolution.WebApi.Libraries.JwtToken;
+using MySolution.WebApi.Libraries.Validator;
+using MySolution.WebApi.Services.Identity;
+using MySolution.WebApi.Services.Identity.Models;
 using Scalar.AspNetCore;
+using System.Security.Claims;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+
+    options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
+
+    options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
+});
+
+builder.Services.AddSingleton(TimeProvider.System);
 
 // Add services to the container.
 builder.Services.AddDbContext<DefaultDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddOpenApi();
+builder.Services.AddMapster();
+builder.Services.AddGlobalizer();
+builder.Services.AddValidators();
+builder.Services.AddRepositories();
+builder.Services.AddServices();
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+    .AddJwt(options => builder.Configuration.Bind("Jwt", options));
+
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
@@ -19,30 +60,21 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference();
 }
 
-app.UseHttpsRedirection();
+app.UseHttpsRedirection(); 
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+app.UseAuthentication();
+app.UseAuthorization();
 
-app.MapGet("/weatherforecast", (DefaultDbContext defaultDbContext) =>
+await app.RunDbMigrationsAsync<DefaultDbContext>();
+
+app.MapIdentity();
+
+// Protected endpoint example
+app.MapGet("/me", (ClaimsPrincipal user) =>
 {
-    var forecast = Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
+    var userId = user.GetUserId();
+    return Results.Ok(new { UserId = userId });
 })
-.WithName("GetWeatherForecast");
+.RequireAuthorization();
 
-app.Run();
-
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+await app.RunAsync();

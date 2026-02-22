@@ -6,16 +6,34 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace MySolution.WebApi.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialIdentityMigration : Migration
+    public partial class InitialMigration : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
+                name: "JwtTokens",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Subject = table.Column<string>(type: "text", nullable: false),
+                    IssuedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    AccessTokenHash = table.Column<string>(type: "text", nullable: false),
+                    AccessTokenExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    RefreshTokenHash = table.Column<string>(type: "text", nullable: false),
+                    RefreshTokenExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    Scheme = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_JwtTokens", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Roles",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: true)
                 },
@@ -28,7 +46,7 @@ namespace MySolution.WebApi.Data.Migrations
                 name: "Users",
                 columns: table => new
                 {
-                    Id = table.Column<string>(type: "text", nullable: false),
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
                     UserName = table.Column<string>(type: "text", nullable: false),
                     Email = table.Column<string>(type: "text", nullable: true),
                     EmailVerified = table.Column<bool>(type: "boolean", nullable: false),
@@ -39,14 +57,17 @@ namespace MySolution.WebApi.Data.Migrations
                     Bio = table.Column<string>(type: "text", nullable: true),
                     DateOfBirth = table.Column<DateOnly>(type: "date", nullable: true),
                     Gender = table.Column<int>(type: "integer", nullable: true),
+                    PictureUrl = table.Column<string>(type: "text", nullable: true),
                     Country = table.Column<string>(type: "text", nullable: true),
                     Locale = table.Column<string>(type: "text", nullable: true),
                     PasswordHash = table.Column<string>(type: "text", nullable: true),
                     HasPassword = table.Column<bool>(type: "boolean", nullable: false),
-                    SecurityStamp = table.Column<string>(type: "text", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    DeletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    PasswordChangedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    SecurityStamp = table.Column<Guid>(type: "uuid", nullable: false),
+                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    DeletedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    LastActiveAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -57,8 +78,8 @@ namespace MySolution.WebApi.Data.Migrations
                 name: "RoleUser",
                 columns: table => new
                 {
-                    RolesId = table.Column<string>(type: "text", nullable: false),
-                    UsersId = table.Column<string>(type: "text", nullable: false)
+                    RolesId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UsersId = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -78,6 +99,31 @@ namespace MySolution.WebApi.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "IX_JwtTokens_AccessTokenExpiresAt",
+                table: "JwtTokens",
+                column: "AccessTokenExpiresAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_JwtTokens_AccessTokenHash",
+                table: "JwtTokens",
+                column: "AccessTokenHash");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_JwtTokens_RefreshTokenExpiresAt",
+                table: "JwtTokens",
+                column: "RefreshTokenExpiresAt");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_JwtTokens_RefreshTokenHash",
+                table: "JwtTokens",
+                column: "RefreshTokenHash");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_JwtTokens_Subject",
+                table: "JwtTokens",
+                column: "Subject");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Roles_Name",
                 table: "Roles",
                 column: "Name",
@@ -92,15 +138,13 @@ namespace MySolution.WebApi.Data.Migrations
                 name: "IX_Users_Email",
                 table: "Users",
                 column: "Email",
-                unique: true,
-                filter: "[Email] IS NOT NULL");
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_PhoneNumber",
                 table: "Users",
                 column: "PhoneNumber",
-                unique: true,
-                filter: "[PhoneNumber] IS NOT NULL");
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_UserName",
@@ -112,6 +156,9 @@ namespace MySolution.WebApi.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "JwtTokens");
+
             migrationBuilder.DropTable(
                 name: "RoleUser");
 

@@ -13,12 +13,12 @@ namespace MySolution.WebApi.Services.Identity.Configurations
 
             builder.HasIndex(u => u.UserName).IsUnique();
             builder.HasIndex(u => u.Email)
-                   .IsUnique()
-                   .HasFilter($"[{nameof(User.Email)}] IS NOT NULL");
+                   .IsUnique();
+                   //.HasFilter($"[{nameof(User.Email)}] IS NOT NULL");
 
             builder.HasIndex(u => u.PhoneNumber)
-                   .IsUnique()
-                   .HasFilter($"[{nameof(User.PhoneNumber)}] IS NOT NULL");
+                   .IsUnique();
+                   //.HasFilter($"[{nameof(User.PhoneNumber)}] IS NOT NULL");
 
             builder.HasQueryFilter(u => u.DeletedAt == null);
         }
