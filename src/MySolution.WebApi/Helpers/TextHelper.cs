@@ -18,7 +18,6 @@ namespace MySolution.WebApi.Helpers
         public static string GenerateSlug(string input, string separator = "-")
         {
             ArgumentNullException.ThrowIfNull(input);
-            ArgumentNullException.ThrowIfNull(separator);
 
             static string RemoveDiacritics(string text)
             {
@@ -40,7 +39,7 @@ namespace MySolution.WebApi.Helpers
             // Remove everything that's not a letter, number, hyphen, dot, whitespace or underscore.
             input = NonAlphanumericRegex().Replace(input, string.Empty).Trim();
             // Replace symbols with a separator.
-            input = SymbolsRegex().Replace(input, separator);
+            input = SymbolsRegex().Replace(input, separator ?? string.Empty);
             // Replace double occurrences of separator.
             input = DoubleSeparatorRegex().Replace(input, "$1").Trim('-');
 
@@ -51,7 +50,6 @@ namespace MySolution.WebApi.Helpers
         {
             ArgumentNullException.ThrowIfNull(input);
             ArgumentNullException.ThrowIfNull(exists);
-            ArgumentNullException.ThrowIfNull(separator);
 
             var slug = GenerateSlug(input, separator);
 

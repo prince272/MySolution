@@ -19,6 +19,13 @@ namespace MySolution.WebApi.Endpoints
 
             group.MapPost("/signin/refresh", SignInWithRefreshToken)
                  .WithName(nameof(SignInWithRefreshToken));
+
+            group.MapPost("/signout", SignOut)
+                 .WithName(nameof(SignOut));
+
+            group.MapGet("/profile", GetProfile)
+                 .RequireAuthorization()
+                 .WithName(nameof(GetProfile));
         }
 
         public static Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccount(IIdentityService identityService, [FromBody] CreateAccountForm form)
@@ -34,6 +41,18 @@ namespace MySolution.WebApi.Endpoints
         public static Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshToken(IIdentityService identityService, [FromBody] SignInWithRefreshTokenForm form)
         {
             return identityService.SignInWithRefreshTokenAsync(form);
+        }
+
+        public static Task<Results<Ok, ValidationProblem>> SignOut(IIdentityService identityService, Guid userId, [FromBody] SignOutForm form)
+        {
+            return identityService.SignOutAsync(userId, form);
+        }
+
+        public static async Task<Results<Ok<ProfileModel>, NotFound>> GetProfile(IIdentityService identityService, HttpContext httpContext)
+        {
+            var userId = httpContext.User.GetUserId();
+            if (userId.HasValue) return await identityService.GetAccountAsync(userId.Value);
+            return TypedResults.NotFound();
         }
     }
 }

@@ -41,13 +41,15 @@ namespace MySolution.WebApi.Libraries.JwtToken
                         ValidAudiences = tokenOptions.Audience,
 
                         ValidateIssuerSigningKey = true,
-                        IssuerSigningKey =
-                            new SymmetricSecurityKey(
-                                Encoding.UTF8.GetBytes(tokenOptions.Secret)
-                            ),
+                        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(tokenOptions.Secret)),
 
                         ValidateLifetime = true,
-                        ClockSkew = TimeSpan.Zero
+                        ClockSkew = TimeSpan.Zero,
+
+                        NameClaimType = JwtRegisteredClaimNames.Sub,
+                        RoleClaimType = "role",
+
+                        ValidTypes = [JwtTokenTypes.AccessToken]
                     };
 
                     jwtOptions.Events = new JwtBearerEvents
@@ -97,22 +99,10 @@ namespace MySolution.WebApi.Libraries.JwtToken
                                 return;
                             }
                         },
-                        OnMessageReceived = context =>
-                        {
-                            var accessToken = context.Request.Query["access_token"];
-                            var path = context.HttpContext.Request.Path;
-
-                            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/signalr"))
-                            {
-                                context.Token = accessToken;
-                            }
-
-                            return Task.CompletedTask;
-                        },
                         OnChallenge = context =>
                         {
                             var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(JwtBearerEvents));
-                            logger.LogError($"OnChallenge error {context.Error}, {context.ErrorDescription}");
+                            logger.LogError("OnChallenge error: {Error} - {ErrorDescription}", context.Error, context.ErrorDescription);
                             return Task.CompletedTask;
                         },
                     };

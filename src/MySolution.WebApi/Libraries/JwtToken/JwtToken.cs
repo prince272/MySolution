@@ -9,6 +9,5 @@
         public DateTimeOffset AccessTokenExpiresAt { get; set; }
         public string RefreshTokenHash { get; set; } = null!;
         public DateTimeOffset RefreshTokenExpiresAt { get; set; }
-        public string Scheme { get; set; } = null!;
     }
 }

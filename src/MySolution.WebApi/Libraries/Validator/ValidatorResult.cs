@@ -1,6 +1,5 @@
 ﻿using MySolution.WebApi.Helpers;
 using System.Linq.Expressions;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace MySolution.WebApi.Libraries.Validator
 {

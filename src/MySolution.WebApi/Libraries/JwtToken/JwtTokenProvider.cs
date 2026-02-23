@@ -1,5 +1,4 @@
-﻿using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -35,23 +34,22 @@ namespace MySolution.WebApi.Libraries.JwtToken
         {
             ArgumentNullException.ThrowIfNull(subject, nameof(subject));
 
-            var now = _globalizer.Time.GetUtcNow();
-            var accessTokenExpiresAt = now.Add(_options.AccessTokenExpiresIn);
-            var refreshTokenExpiresAt = now.Add(_options.RefreshTokenExpiresIn);
+            var currentTime = _globalizer.Time.GetUtcNow();
+            var accessTokenExpiresAt = currentTime.Add(_options.AccessTokenExpiresIn);
+            var refreshTokenExpiresAt = currentTime.Add(_options.RefreshTokenExpiresIn);
 
-            var accessToken = GenerateToken(subject, now, accessTokenExpiresAt, TokenType.Access, claims);
-            var refreshToken = GenerateToken(subject, now, refreshTokenExpiresAt, TokenType.Refresh, null);
+            var accessToken = GenerateToken(subject, currentTime, accessTokenExpiresAt, JwtTokenTypes.AccessToken, claims);
+            var refreshToken = GenerateToken(subject, currentTime, refreshTokenExpiresAt, JwtTokenTypes.RefreshToken, null);
 
             var tokenEntity = new JwtToken
             {
                 Id = Guid.NewGuid(),
                 Subject = subject,
-                IssuedAt = now,
+                IssuedAt = currentTime,
                 AccessTokenHash = HashHelper.HashInput(accessToken),
                 AccessTokenExpiresAt = accessTokenExpiresAt,
                 RefreshTokenHash = HashHelper.HashInput(refreshToken),
-                RefreshTokenExpiresAt = refreshTokenExpiresAt,
-                Scheme = JwtBearerDefaults.AuthenticationScheme
+                RefreshTokenExpiresAt = refreshTokenExpiresAt
             };
 
             _dbContext.Set<JwtToken>().Add(tokenEntity);
@@ -59,7 +57,6 @@ namespace MySolution.WebApi.Libraries.JwtToken
 
             return new JwtRawToken
             {
-                Scheme = "Bearer",
                 AccessToken = accessToken,
                 AccessTokenExpiresAt = accessTokenExpiresAt,
                 RefreshToken = refreshToken,
@@ -83,24 +80,31 @@ namespace MySolution.WebApi.Libraries.JwtToken
         {
             ArgumentNullException.ThrowIfNull(subject, nameof(subject));
 
-            var now = _globalizer.Time.GetUtcNow();
-            var expiredTokens = await _dbContext.Set<JwtToken>()
-                .Where(t => t.Subject == subject && t.RefreshTokenExpiresAt < now)
+            var currentTime = _globalizer.Time.GetUtcNow();
+            // Delete fully expired tokens
+            var fullyExpiredTokens = await _dbContext.Set<JwtToken>()
+                .Where(t => t.Subject == subject &&
+                           t.AccessTokenExpiresAt < currentTime &&
+                           t.RefreshTokenExpiresAt < currentTime)
                 .ToListAsync(cancellationToken);
 
-            _dbContext.Set<JwtToken>().RemoveRange(expiredTokens);
+            _dbContext.Set<JwtToken>().RemoveRange(fullyExpiredTokens);
+
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task RevokeTokenAsync(string subject, string? tokenString = null, CancellationToken cancellationToken = default)
+        public async Task RevokeTokenAsync(string subject, string tokenString, CancellationToken cancellationToken = default)
         {
-            var now = _globalizer.Time.GetUtcNow();
+            ArgumentNullException.ThrowIfNull(subject, nameof(subject));
+            ArgumentNullException.ThrowIfNull(tokenString, nameof(tokenString));
+
+            var currentTime = _globalizer.Time.GetUtcNow();
 
             // Delete fully expired tokens
             var fullyExpiredTokens = await _dbContext.Set<JwtToken>()
                 .Where(t => t.Subject == subject &&
-                           t.AccessTokenExpiresAt < now &&
-                           t.RefreshTokenExpiresAt < now)
+                           t.AccessTokenExpiresAt < currentTime &&
+                           t.RefreshTokenExpiresAt < currentTime)
                 .ToListAsync(cancellationToken);
 
             _dbContext.Set<JwtToken>().RemoveRange(fullyExpiredTokens);
@@ -127,23 +131,23 @@ namespace MySolution.WebApi.Libraries.JwtToken
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task<ClaimsPrincipal?> ValidateAccessTokenAsync(string? tokenString, CancellationToken cancellationToken = default)
+        public async Task<ClaimsPrincipal?> ValidateAccessTokenAsync(string tokenString, CancellationToken cancellationToken = default)
         {
-            return await ValidateTokenAsync(TokenType.Access, tokenString, cancellationToken);
+            return await ValidateTokenAsync(JwtTokenTypes.AccessToken, tokenString, cancellationToken);
         }
 
-        public async Task<ClaimsPrincipal?> ValidateRefreshTokenAsync(string? tokenString, CancellationToken cancellationToken = default)
+        public async Task<ClaimsPrincipal?> ValidateRefreshTokenAsync(string tokenString, CancellationToken cancellationToken = default)
         {
-            return await ValidateTokenAsync(TokenType.Refresh, tokenString, cancellationToken);
+            return await ValidateTokenAsync(JwtTokenTypes.RefreshToken, tokenString, cancellationToken);
         }
 
-        private async Task<ClaimsPrincipal?> ValidateTokenAsync(TokenType tokenType, string? tokenString, CancellationToken cancellationToken = default)
+        private async Task<ClaimsPrincipal?> ValidateTokenAsync(string tokenType, string tokenString, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(tokenString))
-            {
-                _logger.LogWarning("Token validation skipped: token is null or empty.");
-                return null;
-            }
+            ArgumentNullException.ThrowIfNull(tokenType, nameof(tokenType));
+            ArgumentNullException.ThrowIfNull(tokenString, nameof(tokenString));
+
+            if (!JwtTokenTypes.AllTypes.Contains(tokenType, StringComparer.InvariantCulture))
+                throw new ArgumentException($"Invalid token type '{tokenType}'.", nameof(tokenType));
 
             try
             {
@@ -156,15 +160,22 @@ namespace MySolution.WebApi.Libraries.JwtToken
 
                 var validationParameters = new TokenValidationParameters
                 {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(key),
                     ValidateIssuer = !string.IsNullOrWhiteSpace(_options.Issuer),
                     ValidIssuer = _options.Issuer,
+
                     ValidateAudience = _options.Audience.Any(),
                     ValidAudiences = _options.Audience,
-                    ValidTypes = [tokenType == TokenType.Access ? "at+jwt" : "JWT"],
+
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(key),
+
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.Zero
+                    ClockSkew = TimeSpan.Zero,
+
+                    ValidTypes = [tokenType],
+
+                    NameClaimType = JwtRegisteredClaimNames.Sub,
+                    RoleClaimType = "role",
                 };
 
                 var principal = tokenHandler.ValidateToken(tokenString, validationParameters, out var validatedToken);
@@ -211,20 +222,21 @@ namespace MySolution.WebApi.Libraries.JwtToken
             }
         }
 
-        private async Task<bool> ValidateTokenInDatabaseAsync(string subject, string tokenString, TokenType tokenType, CancellationToken cancellationToken = default)
+        private async Task<bool> ValidateTokenInDatabaseAsync(string subject, string tokenString, string tokenType, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(tokenString))
-                return false;
+            ArgumentNullException.ThrowIfNull(subject, nameof(subject));
+            ArgumentNullException.ThrowIfNull(tokenType, nameof(tokenType));
+            ArgumentNullException.ThrowIfNull(tokenString, nameof(tokenString));
+
+            if (!JwtTokenTypes.AllTypes.Contains(tokenType, StringComparer.InvariantCulture))
+                throw new ArgumentException($"Invalid token type '{tokenType}'.", nameof(tokenType));
 
             var tokenHash = HashHelper.HashInput(tokenString);
-            if (string.IsNullOrWhiteSpace(tokenHash))
-                return false;
-
             var currentTime = _globalizer.Time.GetUtcNow();
 
             var query = _dbContext.Set<JwtToken>().Where(t => t.Subject == subject);
 
-            if (tokenType == TokenType.Access)
+            if (tokenType == JwtTokenTypes.AccessToken)
             {
                 query = query.Where(t => t.AccessTokenHash == tokenHash &&
                                         t.AccessTokenExpiresAt > currentTime);
@@ -239,14 +251,19 @@ namespace MySolution.WebApi.Libraries.JwtToken
             return tokenExists;
         }
 
-        private string GenerateToken(string subject, DateTimeOffset issuedAt, DateTimeOffset expiresAt, TokenType tokenType, IEnumerable<Claim>? additionalClaims)
+        private string GenerateToken(string subject, DateTimeOffset issuedAt, DateTimeOffset expiresAt, string tokenType, IEnumerable<Claim>? additionalClaims)
         {
+            ArgumentNullException.ThrowIfNull(tokenType, nameof(tokenType));
+
+            if (!JwtTokenTypes.AllTypes.Contains(tokenType, StringComparer.InvariantCulture))
+                throw new ArgumentException($"Invalid token type '{tokenType}'.", nameof(tokenType));
+
             var claims = new List<Claim>
             {
                 new(JwtRegisteredClaimNames.Sub, subject),
                 new(JwtRegisteredClaimNames.Iat, issuedAt.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
                 new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new(JwtRegisteredClaimNames.Typ, tokenType == TokenType.Access ? "at+jwt" : "JWT")
+                new(JwtRegisteredClaimNames.Typ, tokenType)
             };
 
             if (!string.IsNullOrWhiteSpace(_options.Issuer))
@@ -285,14 +302,16 @@ namespace MySolution.WebApi.Libraries.JwtToken
         Task<JwtRawToken> CreateTokenAsync(string subject, IEnumerable<Claim>? claims = null, CancellationToken cancellationToken = default);
         Task RevokeAllTokensAsync(string subject, CancellationToken cancellationToken = default);
         Task RevokeExpiredTokensAsync(string subject, CancellationToken cancellationToken = default);
-        Task RevokeTokenAsync(string subject, string? tokenString = null, CancellationToken cancellationToken = default);
-        Task<ClaimsPrincipal?> ValidateAccessTokenAsync(string? tokenString, CancellationToken cancellationToken = default);
-        Task<ClaimsPrincipal?> ValidateRefreshTokenAsync(string? tokenString, CancellationToken cancellationToken = default);
+        Task RevokeTokenAsync(string subject, string tokenString, CancellationToken cancellationToken = default);
+        Task<ClaimsPrincipal?> ValidateAccessTokenAsync(string tokenString, CancellationToken cancellationToken = default);
+        Task<ClaimsPrincipal?> ValidateRefreshTokenAsync(string tokenString, CancellationToken cancellationToken = default);
     }
 
-    public enum TokenType
+    public static class JwtTokenTypes
     {
-        Access,
-        Refresh
+        public const string AccessToken = "at+jwt";
+        public const string RefreshToken = "rt+jwt";
+
+        public static readonly string[] AllTypes = [AccessToken, RefreshToken];
     }
 }

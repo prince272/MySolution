@@ -1,9 +1,4 @@
-﻿using FluentValidation;
-using Humanizer;
-using MySolution.WebApi.Helpers;
-using System.ComponentModel.DataAnnotations;
-using System.Linq.Expressions;
-using System.Reflection;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace MySolution.WebApi.Libraries.Validator
 {
@@ -18,7 +13,7 @@ namespace MySolution.WebApi.Libraries.Validator
 
         public async Task<ValidatorResult> ValidateAsync<TModel>(TModel model, CancellationToken ct = default)
         {
-            if (model == null) throw new ArgumentNullException(nameof(model));
+            ArgumentNullException.ThrowIfNull(model, nameof(model));
 
             var errors = new Dictionary<string, List<string>>();
 

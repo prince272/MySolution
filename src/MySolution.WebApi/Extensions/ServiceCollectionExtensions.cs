@@ -1,9 +1,5 @@
-﻿using FluentValidation;
-using Microsoft.AspNetCore.DataProtection.Repositories;
-using MySolution.WebApi.Services.Identity;
+﻿using MySolution.WebApi.Services.Identity;
 using MySolution.WebApi.Services.Identity.Repositories;
-using System.ComponentModel.DataAnnotations;
-using System.Reflection;
 
 namespace MySolution.WebApi.Extensions
 {

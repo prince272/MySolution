@@ -1,5 +1,4 @@
 ﻿using Humanizer;
-using Mapster;
 using MapsterMapper;
 using Microsoft.AspNetCore.Http.HttpResults;
 using MySolution.WebApi.Helpers;
@@ -9,8 +8,6 @@ using MySolution.WebApi.Libraries.Validator;
 using MySolution.WebApi.Services.Identity.Entities;
 using MySolution.WebApi.Services.Identity.Models;
 using MySolution.WebApi.Services.Identity.Repositories;
-using Npgsql;
-using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
@@ -52,7 +49,7 @@ namespace MySolution.WebApi.Services.Identity
             if (!validatorResult.IsValid)
                 return TypedResults.ValidationProblem(validatorResult.Errors);
 
-            var currentDateTime = _globalizer.Time.GetUtcNow();
+            var currentTime = _globalizer.Time.GetUtcNow();
             var currentRegionCode = _globalizer.Region.TwoLetterISORegionName.ToUpperInvariant();
 
             var user = new User()
@@ -66,13 +63,13 @@ namespace MySolution.WebApi.Services.Identity
                 SecurityStamp = Guid.NewGuid(),
                 HasPassword = true,
                 PasswordHash = HashHelper.HashInput(form.Password),
-                CreatedAt = currentDateTime,
-                LastActiveAt = currentDateTime
+                CreatedAt = currentTime,
+                LastActiveAt = currentTime
             };
 
             await _userRepository.AddAsync(user, cancellationToken);
             await _userRepository.AddRolesAsync(user, [RoleName.Viewer], cancellationToken);
-            var token = await _jwtTokenProvider.CreateTokenAsync(user.Id.ToString(), user.GetIdentityClaims());
+            var token = await _jwtTokenProvider.CreateTokenAsync(user.Id.ToString(), user.GetIdentityClaims(), cancellationToken);
             var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
             return TypedResults.Ok(userModel);
         }
@@ -109,7 +106,7 @@ namespace MySolution.WebApi.Services.Identity
             if (!validatorResult.IsValid)
                 return TypedResults.ValidationProblem(validatorResult.Errors);
 
-            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetIdentityClaims());
+            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetIdentityClaims(), cancellationToken);
             var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
             return TypedResults.Ok(userModel);
         }
@@ -124,7 +121,7 @@ namespace MySolution.WebApi.Services.Identity
 
             if (!validatorResult.ContainsErrorKey(() => form.RefreshToken))
             {
-                var claimsPrincipal = await _jwtTokenProvider.ValidateRefreshTokenAsync(form.RefreshToken);
+                var claimsPrincipal = await _jwtTokenProvider.ValidateRefreshTokenAsync(form.RefreshToken, cancellationToken);
                 var userId = claimsPrincipal?.GetUserId();
                 user = userId.HasValue ? await _userRepository.GetByIdAsync(userId.Value, cancellationToken) : null;
 
@@ -137,11 +134,43 @@ namespace MySolution.WebApi.Services.Identity
             if (!validatorResult.IsValid)
                 return TypedResults.ValidationProblem(validatorResult.Errors);
 
-            await _jwtTokenProvider.RevokeTokenAsync(user!.Id.ToString(), form.RefreshToken);
-            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetIdentityClaims());
+            await _jwtTokenProvider.RevokeTokenAsync(user!.Id.ToString(), form.RefreshToken, cancellationToken);
+            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetIdentityClaims(), cancellationToken);
             var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
             return TypedResults.Ok(userModel);
 
+        }
+
+        public async Task<Results<Ok, ValidationProblem>> SignOutAsync(Guid userId, SignOutForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form);
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            if (form.RevokeAllTokens)
+            {
+                await _jwtTokenProvider.RevokeAllTokensAsync(userId.ToString(), cancellationToken);
+            }
+            else
+            {
+                await _jwtTokenProvider.RevokeTokenAsync(userId.ToString(), form.RefreshToken!, cancellationToken);
+            }
+
+            return TypedResults.Ok();
+        }
+
+        public async Task<Results<Ok<ProfileModel>, NotFound>> GetAccountAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+
+            if (user == null)
+                return TypedResults.NotFound();
+            
+            var model = _mapper.Map<ProfileModel>(user);
+            return TypedResults.Ok(model);
         }
     }
 
@@ -150,6 +179,8 @@ namespace MySolution.WebApi.Services.Identity
         Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccountAsync(CreateAccountForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<AccountModel>, ValidationProblem>> SignInAsync(SignInForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshTokenAsync(SignInWithRefreshTokenForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem>> SignOutAsync(Guid userId, SignOutForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok<ProfileModel>, NotFound>> GetAccountAsync(Guid userId, CancellationToken cancellationToken = default);
     }
 
     public static class ClaimsPrincipalExtensions
@@ -215,10 +246,7 @@ namespace MySolution.WebApi.Services.Identity
                                 .ToHashSet(StringComparer.OrdinalIgnoreCase)
                             ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            if (!principalRoles.SetEquals(userRoles))
-                return false;
-
-            return true;
+            return principalRoles.SetEquals(userRoles);
         }
 
         public static Guid? GetUserId(this ClaimsPrincipal principal)

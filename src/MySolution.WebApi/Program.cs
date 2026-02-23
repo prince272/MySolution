@@ -1,7 +1,5 @@
-using FluentValidation;
 using Mapster;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MySolution.WebApi.Data;
 using MySolution.WebApi.Endpoints;
@@ -10,7 +8,6 @@ using MySolution.WebApi.Libraries.Globalizer;
 using MySolution.WebApi.Libraries.JwtToken;
 using MySolution.WebApi.Libraries.Validator;
 using MySolution.WebApi.Services.Identity;
-using MySolution.WebApi.Services.Identity.Models;
 using Scalar.AspNetCore;
 using System.Security.Claims;
 using System.Text.Json;
@@ -56,11 +53,11 @@ var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi(); 
+    app.MapOpenApi();
     app.MapScalarApiReference();
 }
 
-app.UseHttpsRedirection(); 
+app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();

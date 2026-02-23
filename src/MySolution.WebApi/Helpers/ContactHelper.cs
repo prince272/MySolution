@@ -1,7 +1,7 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using PhoneNumbers;
+using System.Diagnostics.CodeAnalysis;
 using System.Net.Mail;
 using System.Text.RegularExpressions;
-using PhoneNumbers;
 namespace MySolution.WebApi.Helpers
 {
     public static partial class ContactHelper
