@@ -35,7 +35,7 @@ namespace MySolution.WebApi.Helpers
 
         public static string GetExpressionText(LambdaExpression expression, ConcurrentDictionary<LambdaExpression, string>? expressionTextCache, bool includeStart = true)
         {
-            ArgumentNullException.ThrowIfNull(expression);
+            ArgumentNullException.ThrowIfNull(expression, nameof(expression));
 
             if (expressionTextCache != null &&
                 expressionTextCache.TryGetValue(expression, out var expressionText))
@@ -187,9 +187,9 @@ namespace MySolution.WebApi.Helpers
             Expression indexExpression,
             LambdaExpression parentExpression)
         {
-            ArgumentNullException.ThrowIfNull(builder);
-            ArgumentNullException.ThrowIfNull(indexExpression);
-            ArgumentNullException.ThrowIfNull(parentExpression);
+            ArgumentNullException.ThrowIfNull(builder, nameof(builder));
+            ArgumentNullException.ThrowIfNull(indexExpression, nameof(indexExpression));
+            ArgumentNullException.ThrowIfNull(parentExpression, nameof(parentExpression));
 
             if (parentExpression.Parameters == null)
             {

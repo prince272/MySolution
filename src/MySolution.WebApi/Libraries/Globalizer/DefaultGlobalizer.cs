@@ -1,27 +1,54 @@
-﻿using System.Globalization;
+﻿using DeviceId;
+using System.Globalization;
 
 namespace MySolution.WebApi.Libraries.Globalizer
 {
-    public class DefaultGlobalizer : IGlobalizer
+    public sealed class DefaultGlobalizer : IGlobalizer
     {
-        private readonly TimeProvider _time;
-        private readonly CultureInfo _culture;
-
-        public DefaultGlobalizer(TimeProvider timeProvider, CultureInfo culture)
+        public DefaultGlobalizer(TimeProvider timeProvider, DeviceProvider deviceProvider, CultureInfo culture)
         {
-            _time = timeProvider;
-            _culture = culture;
+            Time = timeProvider;
+            Device = deviceProvider;
+            Culture = culture;
         }
 
-        public CultureInfo Culture => _culture;
-        public RegionInfo Region => new(_culture.Name);
-        public TimeProvider Time => _time;
+        public CultureInfo Culture { get; }
+        public RegionInfo Region => new(Culture.Name);
+        public TimeProvider Time { get; }
+        public DeviceProvider Device { get; }
     }
 
-    public interface IGlobalizer
+    public abstract class DeviceProvider
     {
-        CultureInfo Culture { get; }
-        RegionInfo Region { get; }
-        TimeProvider Time { get; }
+        public static DeviceProvider System { get; } = new SystemDeviceProvider();
+
+        private readonly Lazy<string> _deviceId;
+
+        protected DeviceProvider()
+        {
+            _deviceId = new Lazy<string>(BuildDeviceId);
+        }
+
+        public string Id => _deviceId.Value;
+
+        public virtual string MachineName => Environment.MachineName;
+
+        public virtual string OsVersion => Environment.OSVersion.ToString();
+
+        public virtual string UserName => Environment.UserName;
+
+        protected abstract string BuildDeviceId();
+
+        private sealed class SystemDeviceProvider : DeviceProvider
+        {
+            protected override string BuildDeviceId() =>
+                new DeviceIdBuilder()
+                    .AddMachineName()
+                    .AddOsVersion()
+                    .AddUserName()
+                    .AddMacAddress()
+                    .AddFileToken("device-token.txt")
+                    .ToString();
+        }
     }
 }

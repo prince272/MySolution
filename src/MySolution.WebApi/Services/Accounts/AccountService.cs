@@ -1,0 +1,312 @@
+﻿using Humanizer;
+using MapsterMapper;
+using Microsoft.AspNetCore.Http.HttpResults;
+using MySolution.WebApi.Helpers;
+using MySolution.WebApi.Libraries.Globalizer;
+using MySolution.WebApi.Libraries.JwtTokenProvider;
+using MySolution.WebApi.Libraries.MessageProvider;
+using MySolution.WebApi.Libraries.Validator;
+using MySolution.WebApi.Libraries.ViewRenderer;
+using MySolution.WebApi.Services.Accounts.Entities;
+using MySolution.WebApi.Services.Accounts.Models;
+using MySolution.WebApi.Services.Accounts.Repositories;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+
+namespace MySolution.WebApi.Services.Accounts
+{
+    public class AccountService : IAccountService
+    {
+        private readonly IUserRepository _userRepository;
+        private readonly IValidator _validator;
+        private readonly IMapper _mapper;
+        private readonly IGlobalizer _globalizer;
+        private readonly IJwtTokenProvider _jwtTokenProvider;
+        private readonly IViewRenderer _viewRenderer;
+        private readonly IEnumerable<IMessageProvider> _messageProviders;
+
+        public AccountService(
+            IUserRepository userRepository, 
+            IValidator validator, 
+            IMapper mapper, 
+            IGlobalizer globalizer, 
+            IJwtTokenProvider jwtTokenProvider, 
+            IViewRenderer viewRenderer,
+            IEnumerable<IMessageProvider> messageProviders)
+        {
+            _userRepository = userRepository;
+            _validator = validator;
+            _mapper = mapper;
+            _globalizer = globalizer;
+            _jwtTokenProvider = jwtTokenProvider;
+            _viewRenderer = viewRenderer;
+            _messageProviders = messageProviders;
+        }
+
+        public async Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccountAsync(CreateAccountForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            if (!validatorResult.ContainsErrorKey(() => form.Username))
+            {
+                var userExists = await _userRepository.ExistsByEmailOrPhoneAsync(form.Username, cancellationToken);
+
+                if (userExists)
+                {
+                    validatorResult.AddError(() => form.Username, $"'{ContactHelper.DetectContactType(form.Username)?.Humanize() ?? "Username"}' already exists.");
+                }
+            }
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            var currentTime = _globalizer.Time.GetUtcNow();
+            var currentRegionCode = _globalizer.Region.TwoLetterISORegionName.ToUpperInvariant();
+
+            var user = new User()
+            {
+                Id = Guid.NewGuid(),
+                FirstName = form.FirstName,
+                LastName = form.LastName,
+                UserName = await TextHelper.GenerateUniqueSlugAsync(form.Username, _userRepository.ExistsByUserNameAsync, cancellationToken: cancellationToken),
+                Email = ContactHelper.TryParseEmail(form.Username, out var emailInfo) ? emailInfo.Address : null,
+                HasPassword = true,
+                PasswordHash = CryptoHelper.GenerateHash(form.Password),
+                CreatedAt = currentTime,
+                LastActiveAt = currentTime
+            };
+
+            await _userRepository.AddAsync(user, cancellationToken);
+            await _userRepository.AddRolesAsync(user, [RoleName.Viewer], cancellationToken);
+            var token = await _jwtTokenProvider.CreateTokenAsync(user.Id.ToString(), user.GetIdentityClaims(), cancellationToken);
+            var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
+            return TypedResults.Ok(userModel);
+        }
+
+        public async Task<Results<Ok<AccountModel>, ValidationProblem>> SignInAsync(SignInForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            User? user = null;
+
+            if (!validatorResult.ContainsErrorKey(() => form.Username))
+            {
+                user = await _userRepository.GetByEmailOrPhoneAsync(form.Username, cancellationToken);
+
+                if (user == null)
+                {
+                    validatorResult.AddError(() => form.Username, $"'{ContactHelper.DetectContactType(form.Username)?.Humanize() ?? "Username"}' does not exist.");
+                }
+            }
+
+            if (!validatorResult.ContainsErrorKey(() => form.Password))
+            {
+                var passwordVerified = CryptoHelper.ValidateHash(form.Password, user?.PasswordHash);
+
+                if (!passwordVerified)
+                {
+                    validatorResult.AddError(() => form.Password, "'Password' is incorrect.");
+                }
+
+            }
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetIdentityClaims(), cancellationToken);
+            var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
+            return TypedResults.Ok(userModel);
+        }
+
+        public async Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshTokenAsync(SignInWithRefreshTokenForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            User? user = null;
+
+            if (!validatorResult.ContainsErrorKey(() => form.RefreshToken))
+            {
+                var claimsPrincipal = await _jwtTokenProvider.ValidateTokenAsync(JwtTokenTypes.RefreshToken, form.RefreshToken, cancellationToken);
+
+                var userId = claimsPrincipal?.GetUserId();
+                user = userId.HasValue ? await _userRepository.GetByIdAsync(userId.Value, cancellationToken) : null;
+
+                if (user == null)
+                {
+                    validatorResult.AddError(() => form.RefreshToken, "'Refresh token' is invalid.");
+                }
+            }
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            await _jwtTokenProvider.RevokeTokenAsync(user!.Id.ToString(), form.RefreshToken, cancellationToken);
+            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetIdentityClaims(), cancellationToken);
+            var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
+            return TypedResults.Ok(userModel);
+
+        }
+
+        public async Task<Results<Ok, ValidationProblem>> SignOutAsync(Guid userId, SignOutForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            if (form.RevokeAllTokens)
+            {
+                await _jwtTokenProvider.RevokeAllTokensAsync(userId.ToString(), cancellationToken);
+            }
+            else
+            {
+                await _jwtTokenProvider.RevokeTokenAsync(userId.ToString(), form.RefreshToken!, cancellationToken);
+            }
+
+            return TypedResults.Ok();
+        }
+
+        public async Task<Results<Ok<ProfileModel>, NotFound>> GetProfileAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+
+            if (user == null)
+                return TypedResults.NotFound();
+
+            var model = _mapper.Map<ProfileModel>(user);
+            return TypedResults.Ok(model);
+        }
+
+        public async Task<Results<Ok, ValidationProblem>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            User? user = null;
+            if (!validatorResult.ContainsErrorKey(() => form.Username))
+            {
+                user = await _userRepository.GetByEmailOrPhoneAsync(form.Username, cancellationToken);
+                if (user == null)
+                    validatorResult.AddError(() => form.Username,
+                        $"'{ContactHelper.DetectContactType(form.Username)?.Humanize() ?? "Username"}' does not exist.");
+            }
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            var contactType = ContactHelper.DetectContactType(form.Username)
+                ?? throw new InvalidOperationException($"Unable to determine contact type for username '{form.Username}'.");
+
+            var secretKey = CryptoHelper.GenerateHash(
+                string.Join(string.Empty, _globalizer.Device.Id, form.Username, form.Reason, form.NewUsername));
+
+            var code = CryptoHelper.GenerateCode(secretKey, _globalizer.Time.GetUtcNow());
+
+            var (channel, templatePrefix) = contactType switch
+            {
+                ContactType.Email => (MessageChannel.Email, "Email"),
+                ContactType.PhoneNumber => (MessageChannel.Sms, "Sms"),
+                _ => throw new InvalidOperationException($"Unsupported verification reason '{contactType}'.")
+            };
+
+            var body = await _viewRenderer.RenderAsync($"{templatePrefix}/{form.Reason}", form, cancellationToken: cancellationToken);
+
+            await _messageProviders.SendAsync(channel, new Message
+            {
+                To = form.Username,
+                Subject = form.Reason switch
+                {
+                    VerificationCodeReason.VerifyAccount => "Verify your account",
+                    VerificationCodeReason.ChangeAccount => "Confirm your account change",
+                    VerificationCodeReason.ResetPassword => "Reset your password",
+                    _ => throw new InvalidOperationException($"Unsupported verification reason '{form.Reason}'.")
+                },
+                Body = body
+            }, cancellationToken);
+
+            return TypedResults.Ok();
+        }
+    }
+
+    public interface IAccountService
+    {
+        Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccountAsync(CreateAccountForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok<AccountModel>, ValidationProblem>> SignInAsync(SignInForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshTokenAsync(SignInWithRefreshTokenForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem>> SignOutAsync(Guid userId, SignOutForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok<ProfileModel>, NotFound>> GetProfileAsync(Guid userId, CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default);
+    }
+
+    public static class ClaimsPrincipalExtensions
+    {
+        private const string SubClaimType = JwtRegisteredClaimNames.Sub;
+        private const string EmailClaimType = JwtRegisteredClaimNames.Email;
+        private const string PhoneNumberClaimType = JwtRegisteredClaimNames.PhoneNumber;
+        private const string RoleClaimType = "role";
+
+        public static List<Claim> GetIdentityClaims(this User user)
+        {
+            var claims = new List<Claim>();
+
+            if (!string.IsNullOrWhiteSpace(user.Email))
+                claims.Add(new Claim(EmailClaimType, user.Email));
+
+            if (!string.IsNullOrWhiteSpace(user.PhoneNumber))
+                claims.Add(new Claim(PhoneNumberClaimType, user.PhoneNumber));
+
+            if (user.Roles != null)
+            {
+                foreach (var role in user.Roles)
+                    claims.Add(new Claim(RoleClaimType, role.Name.ToString()));
+            }
+
+            return claims;
+        }
+
+        public static string? GetSubject(this ClaimsPrincipal principal)
+        {
+            return principal.FindFirstValue(SubClaimType);
+        }
+
+        public static Guid? GetUserId(this ClaimsPrincipal principal)
+        {
+            var sub = principal.FindFirstValue(SubClaimType);
+            return Guid.TryParse(sub, out var id) ? id : null;
+        }
+
+        public static string? GetEmail(this ClaimsPrincipal principal)
+        {
+            return principal.FindFirstValue(EmailClaimType);
+        }
+
+        public static string? GetPhoneNumber(this ClaimsPrincipal principal)
+        {
+            return principal.FindFirstValue(PhoneNumberClaimType);
+        }
+
+        public static IEnumerable<string> GetRoles(this ClaimsPrincipal principal)
+        {
+            return principal.FindAll(RoleClaimType).Select(c => c.Value);
+        }
+
+        public static bool HasRole(this ClaimsPrincipal principal, string role)
+        {
+            return principal.FindAll(RoleClaimType).Any(c => c.Value == role);
+        }
+
+        public static bool HasUserId(this ClaimsPrincipal principal)
+        {
+            return principal.GetUserId().HasValue;
+        }
+    }
+}

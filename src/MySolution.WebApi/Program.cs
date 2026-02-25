@@ -4,10 +4,16 @@ using Microsoft.EntityFrameworkCore;
 using MySolution.WebApi.Data;
 using MySolution.WebApi.Endpoints;
 using MySolution.WebApi.Extensions;
+using MySolution.WebApi.Extensions.OpenApi;
+using MySolution.WebApi.Libraries.CacheProvider;
 using MySolution.WebApi.Libraries.Globalizer;
-using MySolution.WebApi.Libraries.JwtToken;
+using MySolution.WebApi.Libraries.JwtTokenProvider;
+using MySolution.WebApi.Libraries.MessageProvider;
+using MySolution.WebApi.Libraries.MessageProvider.Email;
+using MySolution.WebApi.Libraries.MessageProvider.Sms;
 using MySolution.WebApi.Libraries.Validator;
-using MySolution.WebApi.Services.Identity;
+using MySolution.WebApi.Libraries.ViewRenderer;
+using MySolution.WebApi.Services.Accounts;
 using Scalar.AspNetCore;
 using System.Security.Claims;
 using System.Text.Json;
@@ -32,10 +38,16 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddDbContext<DefaultDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options =>
+{
+    options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
+});
 builder.Services.AddMapster();
 builder.Services.AddGlobalizer();
 builder.Services.AddValidators();
+builder.Services.AddViewRenderer();
+builder.Services.AddMemoyCacheProvider();
+
 builder.Services.AddRepositories();
 builder.Services.AddServices();
 
@@ -44,7 +56,10 @@ builder.Services.AddAuthentication(options =>
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
-    .AddJwt(options => builder.Configuration.Bind("Jwt", options));
+    .AddJwtTokenProvider(options => builder.Configuration.Bind("Authentication:Jwt", options));
+
+builder.Services.AddEmailProvider(options => builder.Configuration.Bind("Messaging:Email", options))
+                .AddSmsProvider(options => builder.Configuration.Bind("Messaging:Sms", options));
 
 builder.Services.AddAuthorization();
 
@@ -54,7 +69,12 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.MapScalarApiReference();
+    app.MapScalarApiReference(options => options
+        .AddPreferredSecuritySchemes(JwtBearerDefaults.AuthenticationScheme)
+        .AddHttpAuthentication(JwtBearerDefaults.AuthenticationScheme, auth =>
+        {
+            auth.Token = string.Empty;
+        }));
 }
 
 app.UseHttpsRedirection();
@@ -64,14 +84,6 @@ app.UseAuthorization();
 
 await app.RunDbMigrationsAsync<DefaultDbContext>();
 
-app.MapIdentity();
-
-// Protected endpoint example
-app.MapGet("/me", (ClaimsPrincipal user) =>
-{
-    var userId = user.GetUserId();
-    return Results.Ok(new { UserId = userId });
-})
-.RequireAuthorization();
+app.MapAccount();
 
 await app.RunAsync();

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MySolution.WebApi.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace MySolution.WebApi.Data.Migrations
 {
     [DbContext(typeof(DefaultDbContext))]
-    partial class DefaultDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260224224444_RemoveSchemeFromJwtToken")]
+    partial class RemoveSchemeFromJwtToken
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,20 +24,6 @@ namespace MySolution.WebApi.Data.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("MySolution.WebApi.Libraries.JwtTokenProvider.JwtSecurityStamp", b =>
-                {
-                    b.Property<string>("Subject")
-                        .HasColumnType("text");
-
-                    b.Property<string>("SecurityStamp")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Subject");
-
-                    b.ToTable("JwtSecurityStamps", (string)null);
-                });
 
             modelBuilder.Entity("MySolution.WebApi.Libraries.JwtTokenProvider.JwtToken", b =>
                 {
@@ -159,6 +148,9 @@ namespace MySolution.WebApi.Data.Migrations
 
                     b.Property<string>("PictureUrl")
                         .HasColumnType("text");
+
+                    b.Property<Guid>("SecurityStamp")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

@@ -17,7 +17,7 @@ namespace MySolution.WebApi.Helpers
 
         public static string GenerateSlug(string input, string separator = "-")
         {
-            ArgumentNullException.ThrowIfNull(input);
+            ArgumentNullException.ThrowIfNull(input, nameof(input));
 
             static string RemoveDiacritics(string text)
             {
@@ -48,8 +48,8 @@ namespace MySolution.WebApi.Helpers
 
         public static async Task<string> GenerateUniqueSlugAsync(string input, Func<string, CancellationToken, Task<bool>> exists, string separator = "-", CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(input);
-            ArgumentNullException.ThrowIfNull(exists);
+            ArgumentNullException.ThrowIfNull(input, nameof(input));
+            ArgumentNullException.ThrowIfNull(exists, nameof(exists));
 
             var slug = GenerateSlug(input, separator);
 

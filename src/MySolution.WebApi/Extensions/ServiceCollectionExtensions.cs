@@ -1,5 +1,5 @@
-﻿using MySolution.WebApi.Services.Identity;
-using MySolution.WebApi.Services.Identity.Repositories;
+﻿using MySolution.WebApi.Services.Accounts;
+using MySolution.WebApi.Services.Accounts.Repositories;
 
 namespace MySolution.WebApi.Extensions
 {
@@ -8,7 +8,7 @@ namespace MySolution.WebApi.Extensions
         public static IServiceCollection AddServices(this IServiceCollection services)
         {
             // Register your services here
-            services.AddScoped<IIdentityService, IdentityService>();
+            services.AddScoped<IAccountService, AccountService>();
             return services;
         }
 
