@@ -2,6 +2,7 @@
 using MapsterMapper;
 using Microsoft.AspNetCore.Http.HttpResults;
 using MySolution.WebApi.Helpers;
+using MySolution.WebApi.Libraries.CacheProvider;
 using MySolution.WebApi.Libraries.Globalizer;
 using MySolution.WebApi.Libraries.JwtTokenProvider;
 using MySolution.WebApi.Libraries.MessageProvider;
@@ -24,6 +25,7 @@ namespace MySolution.WebApi.Services.Accounts
         private readonly IJwtTokenProvider _jwtTokenProvider;
         private readonly IViewRenderer _viewRenderer;
         private readonly IEnumerable<IMessageProvider> _messageProviders;
+        private readonly ICacheProvider _cacheProvider;
 
         public AccountService(
             IUserRepository userRepository, 
@@ -32,7 +34,8 @@ namespace MySolution.WebApi.Services.Accounts
             IGlobalizer globalizer, 
             IJwtTokenProvider jwtTokenProvider, 
             IViewRenderer viewRenderer,
-            IEnumerable<IMessageProvider> messageProviders)
+            IEnumerable<IMessageProvider> messageProviders,
+            ICacheProvider cacheProvider)
         {
             _userRepository = userRepository;
             _validator = validator;
@@ -41,6 +44,7 @@ namespace MySolution.WebApi.Services.Accounts
             _jwtTokenProvider = jwtTokenProvider;
             _viewRenderer = viewRenderer;
             _messageProviders = messageProviders;
+            _cacheProvider = cacheProvider;
         }
 
         public async Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccountAsync(CreateAccountForm form, CancellationToken cancellationToken = default)
@@ -193,48 +197,74 @@ namespace MySolution.WebApi.Services.Accounts
             return TypedResults.Ok(model);
         }
 
-        public async Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default)
+        public async Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(form, nameof(form));
 
             if (form.Reason == VerificationCodeReason.ChangeAccount)
             {
                 if (!_globalizer.User.IsAuthenticated)
-                {
                     return TypedResults.Unauthorized();
-                }
             }
 
             var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
 
-            User? user = null;
-            if (!validatorResult.ContainsErrorKey(() => form.Username))
+            if (form.Reason == VerificationCodeReason.ChangeAccount)
             {
-                user = await _userRepository.GetByEmailOrPhoneAsync(form.Username, cancellationToken);
-                if (user == null)
-                    validatorResult.AddError(() => form.Username,
-                        $"'{StringParser.DetectContactType(form.Username)?.Humanize() ?? "Username"}' does not exist.");
+                var newUsernameExists = !string.IsNullOrWhiteSpace(form.NewUsername) && await _userRepository.ExistsByEmailOrPhoneAsync(form.NewUsername, cancellationToken);
+
+                if (newUsernameExists)
+                {
+                    validatorResult.AddError(() => form.NewUsername, $"'{StringParser.DetectContactType(form.NewUsername)?.Humanize() ?? "Username"}' is already in use.");
+                    return TypedResults.ValidationProblem(validatorResult.Errors);
+                }
             }
 
             if (!validatorResult.IsValid)
                 return TypedResults.ValidationProblem(validatorResult.Errors);
 
-            var contactType = StringParser.DetectContactType(form.Username)
-                ?? throw new InvalidOperationException($"Unable to determine contact type for username '{form.Username}'.");
-
-            var secretKey = CryptoHelper.GenerateHash(
-                string.Join(string.Empty, _globalizer.Device.Id, form.Username, form.Reason, form.NewUsername));
-
-            var code = CryptoHelper.GenerateCode(secretKey, _globalizer.Time.GetUtcNow());
-
+            var contactType = StringParser.DetectContactType(form.Username) ?? throw new InvalidOperationException($"Unable to determine contact type for username '{form.Username}'.");
             var (channel, templatePrefix) = contactType switch
             {
                 ContactType.Email => (MessageChannel.Email, "Email"),
                 ContactType.PhoneNumber => (MessageChannel.Sms, "Sms"),
-                _ => throw new InvalidOperationException($"Unsupported verification reason '{contactType}'.")
+                _ => throw new InvalidOperationException($"Unsupported contact type '{contactType}'.")
             };
 
-            var body = await _viewRenderer.RenderAsync($"{templatePrefix}/{form.Reason}", form, cancellationToken: cancellationToken);
+            var cooldownKey = $"vc:cooldown:{form.Username}:{form.Reason}".ToLowerInvariant();
+            var attemptKey = $"vc:attempts:{form.Username}:{form.Reason}".ToLowerInvariant();
+            var cooldown = TimeSpan.FromMinutes(2);
+
+            var lastSent = await _cacheProvider.GetAsync(cooldownKey, () => Task.FromResult<DateTimeOffset?>(null));
+
+            if (lastSent.HasValue)
+            {
+                var elapsed = _globalizer.Time.GetUtcNow() - lastSent.Value;
+
+                if (elapsed < cooldown)
+                {
+                    var remaining = cooldown - elapsed;
+                    return TypedResults.Problem($"A code was recently sent. Please wait {remaining.Humanize(precision: 2, minUnit: TimeUnit.Second)} before requesting another.");
+                }
+            }
+
+            var attemptCount = await _cacheProvider.IncrementAsync(attemptKey, 1, TimeSpan.FromHours(1), cancellationToken);
+
+            if (attemptCount > 5)
+            {
+                return TypedResults.Problem("Too many verification codes have been requested. Please try again later.");
+            }
+
+            var user = await _userRepository.GetByEmailOrPhoneAsync(form.Username, cancellationToken);
+
+            if (user == null)
+                return TypedResults.Ok();
+
+            var secretKey = CryptoHelper.GenerateHash(string.Join(string.Empty, _globalizer.Device.Id, form.Username, form.Reason, form.NewUsername));
+
+            var code = CryptoHelper.GenerateCode(secretKey, _globalizer.Time.GetUtcNow());
+
+            var body = await _viewRenderer.RenderAsync($"{templatePrefix}/{form.Reason}", (form, code), cancellationToken: cancellationToken);
 
             await _messageProviders.SendAsync(channel, new Message
             {
@@ -244,10 +274,12 @@ namespace MySolution.WebApi.Services.Accounts
                     VerificationCodeReason.VerifyAccount => "Verify your account",
                     VerificationCodeReason.ChangeAccount => "Confirm your account change",
                     VerificationCodeReason.ResetPassword => "Reset your password",
-                    _ => throw new InvalidOperationException($"Unsupported verification reason '{form.Reason}'.")
+                    _ => string.Empty
                 },
                 Body = body
             }, cancellationToken);
+
+            await _cacheProvider.SetAsync(cooldownKey, () => Task.FromResult<DateTimeOffset?>(_globalizer.Time.GetUtcNow()), cooldown, cancellationToken);
 
             return TypedResults.Ok();
         }
@@ -260,7 +292,7 @@ namespace MySolution.WebApi.Services.Accounts
         Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshTokenAsync(SignInWithRefreshTokenForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SignOutAsync(SignOutForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<ProfileModel>, NotFound, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default);
-        Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default);
     }
 
     public static class ClaimsPrincipalExtensions

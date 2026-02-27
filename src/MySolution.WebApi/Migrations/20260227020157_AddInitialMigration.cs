@@ -1,27 +1,39 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace MySolution.WebApi.Data.Migrations
+namespace MySolution.WebApi.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialMigration : Migration
+    public partial class AddInitialMigration : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
+                name: "JwtSecurityStamps",
+                columns: table => new
+                {
+                    Subject = table.Column<string>(type: "text", nullable: false),
+                    SecurityStamp = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_JwtSecurityStamps", x => x.Subject);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "JwtTokens",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<string>(type: "text", nullable: false),
                     Subject = table.Column<string>(type: "text", nullable: false),
                     IssuedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     AccessTokenHash = table.Column<string>(type: "text", nullable: false),
                     AccessTokenExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     RefreshTokenHash = table.Column<string>(type: "text", nullable: false),
-                    RefreshTokenExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                    Scheme = table.Column<string>(type: "text", nullable: false)
+                    RefreshTokenExpiresAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -32,7 +44,7 @@ namespace MySolution.WebApi.Data.Migrations
                 name: "Roles",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<string>(type: "text", nullable: false),
                     Name = table.Column<string>(type: "text", nullable: false),
                     Description = table.Column<string>(type: "text", nullable: true)
                 },
@@ -45,7 +57,7 @@ namespace MySolution.WebApi.Data.Migrations
                 name: "Users",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Id = table.Column<string>(type: "text", nullable: false),
                     UserName = table.Column<string>(type: "text", nullable: false),
                     Email = table.Column<string>(type: "text", nullable: true),
                     EmailVerified = table.Column<bool>(type: "boolean", nullable: false),
@@ -62,7 +74,6 @@ namespace MySolution.WebApi.Data.Migrations
                     PasswordHash = table.Column<string>(type: "text", nullable: true),
                     HasPassword = table.Column<bool>(type: "boolean", nullable: false),
                     PasswordChangedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
-                    SecurityStamp = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
                     DeletedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
@@ -77,8 +88,8 @@ namespace MySolution.WebApi.Data.Migrations
                 name: "RoleUser",
                 columns: table => new
                 {
-                    RolesId = table.Column<Guid>(type: "uuid", nullable: false),
-                    UsersId = table.Column<Guid>(type: "uuid", nullable: false)
+                    RolesId = table.Column<string>(type: "text", nullable: false),
+                    UsersId = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -155,6 +166,9 @@ namespace MySolution.WebApi.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropTable(
+                name: "JwtSecurityStamps");
+
             migrationBuilder.DropTable(
                 name: "JwtTokens");
 

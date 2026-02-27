@@ -2,21 +2,18 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using MySolution.WebApi.Data;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace MySolution.WebApi.Data.Migrations
+namespace MySolution.WebApi.Migrations
 {
     [DbContext(typeof(DefaultDbContext))]
-    [Migration("20260225034050_UpdateEntities_1")]
-    partial class UpdateEntities_1
+    partial class DefaultDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -41,9 +38,8 @@ namespace MySolution.WebApi.Data.Migrations
 
             modelBuilder.Entity("MySolution.WebApi.Libraries.JwtTokenProvider.JwtToken", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("AccessTokenExpiresAt")
                         .HasColumnType("timestamp with time zone");
@@ -83,9 +79,8 @@ namespace MySolution.WebApi.Data.Migrations
 
             modelBuilder.Entity("MySolution.WebApi.Services.Accounts.Entities.Role", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
@@ -104,9 +99,8 @@ namespace MySolution.WebApi.Data.Migrations
 
             modelBuilder.Entity("MySolution.WebApi.Services.Accounts.Entities.User", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
 
                     b.Property<string>("Bio")
                         .HasColumnType("text");
@@ -186,11 +180,11 @@ namespace MySolution.WebApi.Data.Migrations
 
             modelBuilder.Entity("RoleUser", b =>
                 {
-                    b.Property<Guid>("RolesId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("RolesId")
+                        .HasColumnType("text");
 
-                    b.Property<Guid>("UsersId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("UsersId")
+                        .HasColumnType("text");
 
                     b.HasKey("RolesId", "UsersId");
 

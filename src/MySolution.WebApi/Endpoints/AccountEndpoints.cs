@@ -15,45 +15,32 @@ namespace MySolution.WebApi.Endpoints
             group.MapPost("/create", CreateAccount)
                  .WithName(nameof(CreateAccount))
                  .WithSummary("Create a new account")
-                 .WithDescription("Registers a new user account. Returns the created account details on success, or validation errors if the form is invalid.")
-                 .Produces<AccountModel>(StatusCodes.Status200OK)
-                 .ProducesValidationProblem();
+                 .WithDescription("Registers a new user account. Returns the created account details on success, or validation errors if the form is invalid.");
 
             group.MapPost("/signin", SignIn)
                  .WithName(nameof(SignIn))
                  .WithSummary("Sign in with credentials")
-                 .WithDescription("Authenticates a user using their email and password. Returns account details including access and refresh tokens on success.")
-                 .Produces<AccountModel>(StatusCodes.Status200OK)
-                 .ProducesValidationProblem();
+                 .WithDescription("Authenticates a user using their email and password. Returns account details including access and refresh tokens on success.");
 
             group.MapPost("/signin/refresh", SignInWithRefreshToken)
                  .WithName(nameof(SignInWithRefreshToken))
                  .WithSummary("Sign in with a refresh token")
-                 .WithDescription("Issues a new access token using a valid refresh token. Use this to silently re-authenticate without requiring the user's credentials again.")
-                 .Produces<AccountModel>(StatusCodes.Status200OK)
-                 .ProducesValidationProblem();
+                 .WithDescription("Issues a new access token using a valid refresh token. Use this to silently re-authenticate without requiring the user's credentials again.");
 
             group.MapPost("/signout", SignOut)
                  .WithName(nameof(SignOut))
                  .WithSummary("Sign out")
-                 .WithDescription("Invalidates the user's current session and refresh token.")
-                 .Produces(StatusCodes.Status200OK)
-                 .ProducesValidationProblem();
+                 .WithDescription("Invalidates the user's current session and refresh token.");
 
             group.MapGet("/profile", GetProfile)
                  .WithName(nameof(GetProfile))
                  .WithSummary("Get the current user's profile")
-                 .WithDescription("Returns profile information for the authenticated user. Requires a valid Bearer token in the Authorization header.")
-                 .Produces<ProfileModel>(StatusCodes.Status200OK)
-                 .Produces(StatusCodes.Status404NotFound)
-                 .RequireAuthorization();
+                 .WithDescription("Returns profile information for the authenticated user. Requires a valid Bearer token in the Authorization header.");
 
             group.MapPost("/verification-code/send", SendVerificationCodeAsync)
                  .WithName(nameof(SendVerificationCodeAsync))
                  .WithSummary("Send a verification code")
-                 .WithDescription("Sends a verification code to the user's registered email or phone number. Use the code to verify account ownership.")
-                 .Produces(StatusCodes.Status200OK)
-                 .ProducesValidationProblem();
+                 .WithDescription("Sends a verification code to the user's registered email or phone number. Use the code to verify account ownership.");
         }
 
         public static Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccount(IAccountService accountService, [FromBody] CreateAccountForm form)
@@ -81,7 +68,7 @@ namespace MySolution.WebApi.Endpoints
             return accountService.GetProfileAsync();
         }
 
-        public static Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SendVerificationCodeAsync(IAccountService accountService, [FromBody] SendVerificationCodeForm form)
+        public static Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> SendVerificationCodeAsync(IAccountService accountService, [FromBody] SendVerificationCodeForm form)
         {
             return accountService.SendVerificationCodeAsync(form);
         }

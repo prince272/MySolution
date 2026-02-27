@@ -9,11 +9,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace MySolution.WebApi.Data.Migrations
+namespace MySolution.WebApi.Migrations
 {
     [DbContext(typeof(DefaultDbContext))]
-    [Migration("20260221135333_InitialMigration")]
-    partial class InitialMigration
+    [Migration("20260227020157_AddInitialMigration")]
+    partial class AddInitialMigration
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -25,11 +25,24 @@ namespace MySolution.WebApi.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("MySolution.WebApi.Libraries.JwtToken.JwtToken", b =>
+            modelBuilder.Entity("MySolution.WebApi.Libraries.JwtTokenProvider.JwtSecurityStamp", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                    b.Property<string>("Subject")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Subject");
+
+                    b.ToTable("JwtSecurityStamps", (string)null);
+                });
+
+            modelBuilder.Entity("MySolution.WebApi.Libraries.JwtTokenProvider.JwtToken", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("AccessTokenExpiresAt")
                         .HasColumnType("timestamp with time zone");
@@ -45,10 +58,6 @@ namespace MySolution.WebApi.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("RefreshTokenHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Scheme")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -71,11 +80,10 @@ namespace MySolution.WebApi.Data.Migrations
                     b.ToTable("JwtTokens", (string)null);
                 });
 
-            modelBuilder.Entity("MySolution.WebApi.Services.Identity.Entities.Role", b =>
+            modelBuilder.Entity("MySolution.WebApi.Services.Accounts.Entities.Role", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
@@ -92,11 +100,10 @@ namespace MySolution.WebApi.Data.Migrations
                     b.ToTable("Roles", (string)null);
                 });
 
-            modelBuilder.Entity("MySolution.WebApi.Services.Identity.Entities.User", b =>
+            modelBuilder.Entity("MySolution.WebApi.Services.Accounts.Entities.User", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
 
                     b.Property<string>("Bio")
                         .HasColumnType("text");
@@ -153,9 +160,6 @@ namespace MySolution.WebApi.Data.Migrations
                     b.Property<string>("PictureUrl")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("SecurityStamp")
-                        .HasColumnType("uuid");
-
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -179,11 +183,11 @@ namespace MySolution.WebApi.Data.Migrations
 
             modelBuilder.Entity("RoleUser", b =>
                 {
-                    b.Property<Guid>("RolesId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("RolesId")
+                        .HasColumnType("text");
 
-                    b.Property<Guid>("UsersId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("UsersId")
+                        .HasColumnType("text");
 
                     b.HasKey("RolesId", "UsersId");
 
@@ -194,13 +198,13 @@ namespace MySolution.WebApi.Data.Migrations
 
             modelBuilder.Entity("RoleUser", b =>
                 {
-                    b.HasOne("MySolution.WebApi.Services.Identity.Entities.Role", null)
+                    b.HasOne("MySolution.WebApi.Services.Accounts.Entities.Role", null)
                         .WithMany()
                         .HasForeignKey("RolesId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("MySolution.WebApi.Services.Identity.Entities.User", null)
+                    b.HasOne("MySolution.WebApi.Services.Accounts.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UsersId")
                         .OnDelete(DeleteBehavior.Cascade)

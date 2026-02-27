@@ -19,20 +19,21 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             _options = options.Value;
         }
 
-        public Task<T> GetAsync<T>(string key, Func<Task<T>> acquire)
-            => GetAsync(key, acquire, _options.CacheTimeSpan);
+        public Task<T> GetAsync<T>(string key, Func<Task<T>> acquire, CancellationToken cancellationToken = default)
+            => GetAsync(key, acquire, _options.CacheTimeSpan, cancellationToken);
 
-        public async Task<T> GetAsync<T>(string key, Func<Task<T>> acquire, TimeSpan cacheTime)
+        public async Task<T> GetAsync<T>(string key, Func<Task<T>> acquire, TimeSpan cacheTime, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(key, nameof(key));
-            ArgumentNullException.ThrowIfNull(acquire, nameof(acquire));
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cacheTime, TimeSpan.Zero, nameof(cacheTime));
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (_cache.TryGetValue(key, out T? cacheEntry))
                 return cacheEntry ?? default!;
 
             var semaphore = CacheEntries.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-            await semaphore.WaitAsync();
+            await semaphore.WaitAsync(cancellationToken);
 
             try
             {
@@ -50,18 +51,19 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             return cacheEntry ?? default!;
         }
 
+        public Task<T> SetAsync<T>(string key, Func<Task<T>> acquire, CancellationToken cancellationToken = default)
+            => SetAsync(key, acquire, _options.CacheTimeSpan, cancellationToken);
 
-        public Task<T> SetAsync<T>(string key, Func<Task<T>> acquire)
-            => SetAsync(key, acquire, _options.CacheTimeSpan);
-
-        public async Task<T> SetAsync<T>(string key, Func<Task<T>> acquire, TimeSpan cacheTime)
+        public async Task<T> SetAsync<T>(string key, Func<Task<T>> acquire, TimeSpan cacheTime, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(key, nameof(key));
             ArgumentNullException.ThrowIfNull(acquire, nameof(acquire));
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cacheTime, TimeSpan.Zero, nameof(cacheTime));
 
+            cancellationToken.ThrowIfCancellationRequested();
+
             var semaphore = CacheEntries.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-            await semaphore.WaitAsync();
+            await semaphore.WaitAsync(cancellationToken);
 
             try
             {
@@ -75,19 +77,19 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             }
         }
 
-        public async Task<long> IncrementAsync(string key, long value = 1, TimeSpan? cacheTime = null)
+        public async Task<long> IncrementAsync(string key, long value = 1, TimeSpan? cacheTime = null, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(key, nameof(key));
 
             if (cacheTime.HasValue)
-            {
                 ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cacheTime.Value, TimeSpan.Zero, nameof(cacheTime));
-            }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             var effectiveCacheTime = cacheTime ?? _options.CacheTimeSpan;
 
             var semaphore = CacheEntries.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
-            await semaphore.WaitAsync();
+            await semaphore.WaitAsync(cancellationToken);
 
             try
             {
@@ -98,8 +100,7 @@ namespace MySolution.WebApi.Libraries.CacheProvider
 
                 currentValue += value;
 
-                _cache.Set(key, currentValue,
-                    GetMemoryCacheEntryOptions(effectiveCacheTime));
+                _cache.Set(key, currentValue, GetMemoryCacheEntryOptions(effectiveCacheTime));
 
                 return currentValue;
             }
@@ -109,16 +110,18 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             }
         }
 
-        public Task<long> DecrementAsync(string key, long value = 1, TimeSpan? cacheTime = null)
+        public Task<long> DecrementAsync(string key, long value = 1, TimeSpan? cacheTime = null, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(key, nameof(key));
 
-            return IncrementAsync(key, -value, cacheTime);
+            return IncrementAsync(key, -value, cacheTime, cancellationToken);
         }
 
-        public Task RemoveAsync(string key)
+        public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(key, nameof(key));
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             _cache.Remove(key);
             CacheEntries.TryRemove(key, out _);
@@ -126,17 +129,19 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             return Task.CompletedTask;
         }
 
-        public Task RemoveByPrefix(string prefix)
+        public Task RemoveByPrefix(string prefix, CancellationToken cancellationToken = default)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(prefix, nameof(prefix));
 
+            cancellationToken.ThrowIfCancellationRequested();
+
             var keys = CacheEntries.Keys
-                .Where(k => k.StartsWith(prefix,
-                    StringComparison.OrdinalIgnoreCase))
+                .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             foreach (var key in keys)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 _cache.Remove(key);
                 CacheEntries.TryRemove(key, out _);
             }
@@ -144,10 +149,15 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             return Task.CompletedTask;
         }
 
-        public Task Clear()
+        public Task Clear(CancellationToken cancellationToken = default)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             foreach (var key in CacheEntries.Keys.ToList())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
                 _cache.Remove(key);
+            }
 
             CacheEntries.Clear();
 
