@@ -1,14 +1,14 @@
 ﻿using Microsoft.Extensions.Options;
 
-namespace MySolution.WebApi.Libraries.MessageProvider.Sms
+namespace MySolution.WebApi.Libraries.MessageSender.Sms
 {
-    public class SmsMessageProvider : IMessageProvider
+    public class SmsMessageSender : IMessageSender
     {
-        private readonly SmsOptions _options;
+        private readonly SmsMessageSenderOptions _options;
 
         public MessageChannel Channel => MessageChannel.Sms;
 
-        public SmsMessageProvider(IOptions<SmsOptions> options)
+        public SmsMessageSender(IOptions<SmsMessageSenderOptions> options)
         {
             _options = options.Value;
         }

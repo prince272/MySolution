@@ -3,14 +3,15 @@ using MailKit.Security;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using MimeKit.Text;
+using System.Security.Principal;
 
-namespace MySolution.WebApi.Libraries.MessageProvider.Email
+namespace MySolution.WebApi.Libraries.MessageSender.Email
 {
-    public class EmailMessageProvider : IMessageProvider
+    public class EmailMessageSender : IMessageSender
     {
-        private readonly EmailOptions _options;
+        private readonly EmailMessageSenderOptions _options;
 
-        public EmailMessageProvider(IOptions<EmailOptions> options)
+        public EmailMessageSender(IOptions<EmailMessageSenderOptions> options)
         {
             _options = options.Value;
         }
@@ -23,7 +24,7 @@ namespace MySolution.WebApi.Libraries.MessageProvider.Email
 
             var mimeMessage = new MimeMessage();
 
-            mimeMessage.From.Add(MailboxAddress.Parse(_options.Username));
+            mimeMessage.From.Add(new MailboxAddress(_options.DisplayName, _options.Username));
             mimeMessage.To.Add(MailboxAddress.Parse(message.To));
             mimeMessage.Subject = message.Subject;
 

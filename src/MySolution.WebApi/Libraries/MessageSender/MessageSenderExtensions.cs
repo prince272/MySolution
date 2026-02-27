@@ -1,9 +1,9 @@
-﻿namespace MySolution.WebApi.Libraries.MessageProvider
+﻿namespace MySolution.WebApi.Libraries.MessageSender
 {
-    public static class MessageProviderExtensions
+    public static class MessageSenderExtensions
     {
         public static async Task SendAsync(
-            this IEnumerable<IMessageProvider> providers,
+            this IEnumerable<IMessageSender> providers,
             MessageChannel channel,
             Message message,
             CancellationToken cancellationToken = default)

@@ -1,6 +1,6 @@
-﻿namespace MySolution.WebApi.Libraries.MessageProvider
+﻿namespace MySolution.WebApi.Libraries.MessageSender
 {
-    public interface IMessageProvider
+    public interface IMessageSender
     {
         MessageChannel Channel { get; }
 

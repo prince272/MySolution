@@ -5,7 +5,7 @@ using MySolution.WebApi.Helpers;
 using MySolution.WebApi.Libraries.CacheProvider;
 using MySolution.WebApi.Libraries.Globalizer;
 using MySolution.WebApi.Libraries.JwtTokenProvider;
-using MySolution.WebApi.Libraries.MessageProvider;
+using MySolution.WebApi.Libraries.MessageSender;
 using MySolution.WebApi.Libraries.Validator;
 using MySolution.WebApi.Libraries.ViewRenderer;
 using MySolution.WebApi.Services.Accounts.Entities;
@@ -24,7 +24,7 @@ namespace MySolution.WebApi.Services.Accounts
         private readonly IGlobalizer _globalizer;
         private readonly IJwtTokenProvider _jwtTokenProvider;
         private readonly IViewRenderer _viewRenderer;
-        private readonly IEnumerable<IMessageProvider> _messageProviders;
+        private readonly IEnumerable<IMessageSender> _messageSender;
         private readonly ICacheProvider _cacheProvider;
 
         public AccountService(
@@ -34,7 +34,7 @@ namespace MySolution.WebApi.Services.Accounts
             IGlobalizer globalizer, 
             IJwtTokenProvider jwtTokenProvider, 
             IViewRenderer viewRenderer,
-            IEnumerable<IMessageProvider> messageProviders,
+            IEnumerable<IMessageSender> messageSender,
             ICacheProvider cacheProvider)
         {
             _userRepository = userRepository;
@@ -43,7 +43,7 @@ namespace MySolution.WebApi.Services.Accounts
             _globalizer = globalizer;
             _jwtTokenProvider = jwtTokenProvider;
             _viewRenderer = viewRenderer;
-            _messageProviders = messageProviders;
+            _messageSender = messageSender;
             _cacheProvider = cacheProvider;
         }
 
@@ -262,20 +262,20 @@ namespace MySolution.WebApi.Services.Accounts
 
             var secretKey = CryptoHelper.GenerateHash(string.Join(string.Empty, _globalizer.Device.Id, form.Username, form.Reason, form.NewUsername));
 
+            var subject = form.Reason switch
+            {
+                VerificationCodeReason.VerifyAccount => "Verify your account",
+                VerificationCodeReason.ChangeAccount => "Confirm your account change",
+                VerificationCodeReason.ResetPassword => "Reset your password",
+                _ => string.Empty
+            };
             var code = CryptoHelper.GenerateCode(secretKey, _globalizer.Time.GetUtcNow());
+            var body = await _viewRenderer.RenderAsync($"{templatePrefix}/VerificationCode", (form, subject, code, user), cancellationToken: cancellationToken);
 
-            var body = await _viewRenderer.RenderAsync($"{templatePrefix}/{form.Reason}", (form, code), cancellationToken: cancellationToken);
-
-            await _messageProviders.SendAsync(channel, new Message
+            await _messageSender.SendAsync(channel, new Message
             {
                 To = form.Username,
-                Subject = form.Reason switch
-                {
-                    VerificationCodeReason.VerifyAccount => "Verify your account",
-                    VerificationCodeReason.ChangeAccount => "Confirm your account change",
-                    VerificationCodeReason.ResetPassword => "Reset your password",
-                    _ => string.Empty
-                },
+                Subject = subject,
                 Body = body
             }, cancellationToken);
 

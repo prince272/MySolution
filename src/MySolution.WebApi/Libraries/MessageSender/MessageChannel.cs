@@ -1,4 +1,4 @@
-﻿namespace MySolution.WebApi.Libraries.MessageProvider
+﻿namespace MySolution.WebApi.Libraries.MessageSender
 {
     public enum MessageChannel
     {

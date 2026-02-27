@@ -1,6 +1,6 @@
-﻿namespace MySolution.WebApi.Libraries.MessageProvider.Sms
+﻿namespace MySolution.WebApi.Libraries.MessageSender.Sms
 {
-    public class SmsOptions
+    public class SmsMessageSenderOptions
     {
         public string ApiKey { get; set; } = default!;
         public string SenderId { get; set; } = default!;

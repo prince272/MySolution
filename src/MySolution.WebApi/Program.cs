@@ -8,9 +8,8 @@ using MySolution.WebApi.Extensions.OpenApi;
 using MySolution.WebApi.Libraries.CacheProvider;
 using MySolution.WebApi.Libraries.Globalizer;
 using MySolution.WebApi.Libraries.JwtTokenProvider;
-using MySolution.WebApi.Libraries.MessageProvider;
-using MySolution.WebApi.Libraries.MessageProvider.Email;
-using MySolution.WebApi.Libraries.MessageProvider.Sms;
+using MySolution.WebApi.Libraries.MessageSender.Email;
+using MySolution.WebApi.Libraries.MessageSender.Sms;
 using MySolution.WebApi.Libraries.Validator;
 using MySolution.WebApi.Libraries.ViewRenderer;
 using MySolution.WebApi.Services.Accounts;
@@ -59,7 +58,7 @@ builder.Services.AddAuthentication(options =>
     .AddJwtTokenProvider(options => builder.Configuration.Bind("Authentication:Jwt", options));
 
 builder.Services.AddEmailProvider(options => builder.Configuration.Bind("Messaging:Email", options))
-                .AddSmsProvider(options => builder.Configuration.Bind("Messaging:Sms", options));
+                .AddSmsSender(options => builder.Configuration.Bind("Messaging:Sms", options));
 
 builder.Services.AddAuthorization();
 
