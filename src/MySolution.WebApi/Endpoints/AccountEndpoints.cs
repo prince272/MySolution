@@ -56,49 +56,34 @@ namespace MySolution.WebApi.Endpoints
                  .ProducesValidationProblem();
         }
 
-        public static Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccount(
-            IAccountService accountService,
-            [FromBody] CreateAccountForm form)
+        public static Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccount(IAccountService accountService, [FromBody] CreateAccountForm form)
         {
             return accountService.CreateAccountAsync(form);
         }
 
-        public static Task<Results<Ok<AccountModel>, ValidationProblem>> SignIn(
-            IAccountService accountService,
-            [FromBody] SignInForm form)
+        public static Task<Results<Ok<AccountModel>, ValidationProblem>> SignIn(IAccountService accountService, [FromBody] SignInForm form)
         {
             return accountService.SignInAsync(form);
         }
 
-        public static Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshToken(
-            IAccountService accountService,
-            [FromBody] SignInWithRefreshTokenForm form)
+        public static Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshToken(IAccountService accountService, [FromBody] SignInWithRefreshTokenForm form)
         {
             return accountService.SignInWithRefreshTokenAsync(form);
         }
 
-        public static Task<Results<Ok, ValidationProblem>> SignOut(
-            IAccountService accountService,
-            Guid userId,
-            [FromBody] SignOutForm form)
+        public static Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SignOut(IAccountService accountService, [FromBody] SignOutForm form)
         {
-            return accountService.SignOutAsync(userId, form);
+            return accountService.SignOutAsync(form);
         }
 
-        public static async Task<Results<Ok<ProfileModel>, NotFound>> GetProfile(
-            IAccountService accountService,
-            HttpContext httpContext)
+        public static Task<Results<Ok<ProfileModel>, NotFound, UnauthorizedHttpResult>> GetProfile(IAccountService accountService)
         {
-            var userId = httpContext.User.GetUserId();
-            if (userId.HasValue) return await accountService.GetProfileAsync(userId.Value);
-            return TypedResults.NotFound();
+            return accountService.GetProfileAsync();
         }
 
-        public static async Task<Results<Ok, ValidationProblem>> SendVerificationCodeAsync(
-            IAccountService accountService,
-            [FromBody] SendVerificationCodeForm form)
+        public static Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SendVerificationCodeAsync(IAccountService accountService, [FromBody] SendVerificationCodeForm form)
         {
-            return await accountService.SendVerificationCodeAsync(form);
+            return accountService.SendVerificationCodeAsync(form);
         }
     }
 }

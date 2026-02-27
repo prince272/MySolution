@@ -55,7 +55,7 @@ namespace MySolution.WebApi.Services.Accounts
 
                 if (userExists)
                 {
-                    validatorResult.AddError(() => form.Username, $"'{ContactHelper.DetectContactType(form.Username)?.Humanize() ?? "Username"}' already exists.");
+                    validatorResult.AddError(() => form.Username, $"'{StringParser.DetectContactType(form.Username)?.Humanize() ?? "Username"}' already exists.");
                 }
             }
 
@@ -67,11 +67,11 @@ namespace MySolution.WebApi.Services.Accounts
 
             var user = new User()
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.NewGuid().ToString(),
                 FirstName = form.FirstName,
                 LastName = form.LastName,
                 UserName = await TextHelper.GenerateUniqueSlugAsync(form.Username, _userRepository.ExistsByUserNameAsync, cancellationToken: cancellationToken),
-                Email = ContactHelper.TryParseEmail(form.Username, out var emailInfo) ? emailInfo.Address : null,
+                Email = StringParser.TryParseEmail(form.Username, out var emailInfo) ? emailInfo.Address : null,
                 HasPassword = true,
                 PasswordHash = CryptoHelper.GenerateHash(form.Password),
                 CreatedAt = currentTime,
@@ -80,7 +80,7 @@ namespace MySolution.WebApi.Services.Accounts
 
             await _userRepository.AddAsync(user, cancellationToken);
             await _userRepository.AddRolesAsync(user, [RoleName.Viewer], cancellationToken);
-            var token = await _jwtTokenProvider.CreateTokenAsync(user.Id.ToString(), user.GetIdentityClaims(), cancellationToken);
+            var token = await _jwtTokenProvider.CreateTokenAsync(user.Id.ToString(), user.GetUserClaims(), cancellationToken);
             var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
             return TypedResults.Ok(userModel);
         }
@@ -99,7 +99,7 @@ namespace MySolution.WebApi.Services.Accounts
 
                 if (user == null)
                 {
-                    validatorResult.AddError(() => form.Username, $"'{ContactHelper.DetectContactType(form.Username)?.Humanize() ?? "Username"}' does not exist.");
+                    validatorResult.AddError(() => form.Username, $"'{StringParser.DetectContactType(form.Username)?.Humanize() ?? "Username"}' does not exist.");
                 }
             }
 
@@ -117,7 +117,7 @@ namespace MySolution.WebApi.Services.Accounts
             if (!validatorResult.IsValid)
                 return TypedResults.ValidationProblem(validatorResult.Errors);
 
-            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetIdentityClaims(), cancellationToken);
+            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetUserClaims(), cancellationToken);
             var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
             return TypedResults.Ok(userModel);
         }
@@ -133,9 +133,8 @@ namespace MySolution.WebApi.Services.Accounts
             if (!validatorResult.ContainsErrorKey(() => form.RefreshToken))
             {
                 var claimsPrincipal = await _jwtTokenProvider.ValidateTokenAsync(JwtTokenTypes.RefreshToken, form.RefreshToken, cancellationToken);
-
-                var userId = claimsPrincipal?.GetUserId();
-                user = userId.HasValue ? await _userRepository.GetByIdAsync(userId.Value, cancellationToken) : null;
+                var userId = claimsPrincipal?.GetSubject();
+                user = !string.IsNullOrWhiteSpace(userId) ? await _userRepository.GetByIdAsync(userId, cancellationToken) : null;
 
                 if (user == null)
                 {
@@ -147,15 +146,19 @@ namespace MySolution.WebApi.Services.Accounts
                 return TypedResults.ValidationProblem(validatorResult.Errors);
 
             await _jwtTokenProvider.RevokeTokenAsync(user!.Id.ToString(), form.RefreshToken, cancellationToken);
-            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetIdentityClaims(), cancellationToken);
+            var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetUserClaims(), cancellationToken);
             var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
             return TypedResults.Ok(userModel);
-
         }
 
-        public async Task<Results<Ok, ValidationProblem>> SignOutAsync(Guid userId, SignOutForm form, CancellationToken cancellationToken = default)
+        public async Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SignOutAsync(SignOutForm form, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            if (!_globalizer.User.IsAuthenticated)
+            {
+                return TypedResults.Unauthorized();
+            }
 
             var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
 
@@ -164,19 +167,24 @@ namespace MySolution.WebApi.Services.Accounts
 
             if (form.RevokeAllTokens)
             {
-                await _jwtTokenProvider.RevokeAllTokensAsync(userId.ToString(), cancellationToken);
+                await _jwtTokenProvider.RevokeAllTokensAsync(_globalizer.User.Id, cancellationToken);
             }
             else
             {
-                await _jwtTokenProvider.RevokeTokenAsync(userId.ToString(), form.RefreshToken!, cancellationToken);
+                await _jwtTokenProvider.RevokeTokenAsync(_globalizer.User.Id, form.RefreshToken!, cancellationToken);
             }
 
             return TypedResults.Ok();
         }
 
-        public async Task<Results<Ok<ProfileModel>, NotFound>> GetProfileAsync(Guid userId, CancellationToken cancellationToken = default)
+        public async Task<Results<Ok<ProfileModel>, NotFound, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default)
         {
-            var user = await _userRepository.GetByIdAsync(userId, cancellationToken);
+            if (!_globalizer.User.IsAuthenticated)
+            {
+                return TypedResults.Unauthorized();
+            }
+
+            var user = await _userRepository.GetByIdAsync(_globalizer.User.Id);
 
             if (user == null)
                 return TypedResults.NotFound();
@@ -185,9 +193,17 @@ namespace MySolution.WebApi.Services.Accounts
             return TypedResults.Ok(model);
         }
 
-        public async Task<Results<Ok, ValidationProblem>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default)
+        public async Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            if (form.Reason == VerificationCodeReason.ChangeAccount)
+            {
+                if (!_globalizer.User.IsAuthenticated)
+                {
+                    return TypedResults.Unauthorized();
+                }
+            }
 
             var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
 
@@ -197,13 +213,13 @@ namespace MySolution.WebApi.Services.Accounts
                 user = await _userRepository.GetByEmailOrPhoneAsync(form.Username, cancellationToken);
                 if (user == null)
                     validatorResult.AddError(() => form.Username,
-                        $"'{ContactHelper.DetectContactType(form.Username)?.Humanize() ?? "Username"}' does not exist.");
+                        $"'{StringParser.DetectContactType(form.Username)?.Humanize() ?? "Username"}' does not exist.");
             }
 
             if (!validatorResult.IsValid)
                 return TypedResults.ValidationProblem(validatorResult.Errors);
 
-            var contactType = ContactHelper.DetectContactType(form.Username)
+            var contactType = StringParser.DetectContactType(form.Username)
                 ?? throw new InvalidOperationException($"Unable to determine contact type for username '{form.Username}'.");
 
             var secretKey = CryptoHelper.GenerateHash(
@@ -242,9 +258,9 @@ namespace MySolution.WebApi.Services.Accounts
         Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccountAsync(CreateAccountForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<AccountModel>, ValidationProblem>> SignInAsync(SignInForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshTokenAsync(SignInWithRefreshTokenForm form, CancellationToken cancellationToken = default);
-        Task<Results<Ok, ValidationProblem>> SignOutAsync(Guid userId, SignOutForm form, CancellationToken cancellationToken = default);
-        Task<Results<Ok<ProfileModel>, NotFound>> GetProfileAsync(Guid userId, CancellationToken cancellationToken = default);
-        Task<Results<Ok, ValidationProblem>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SignOutAsync(SignOutForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok<ProfileModel>, NotFound, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default);
     }
 
     public static class ClaimsPrincipalExtensions
@@ -254,7 +270,7 @@ namespace MySolution.WebApi.Services.Accounts
         private const string PhoneNumberClaimType = JwtRegisteredClaimNames.PhoneNumber;
         private const string RoleClaimType = "role";
 
-        public static List<Claim> GetIdentityClaims(this User user)
+        public static List<Claim> GetUserClaims(this User user)
         {
             var claims = new List<Claim>();
 
@@ -278,12 +294,6 @@ namespace MySolution.WebApi.Services.Accounts
             return principal.FindFirstValue(SubClaimType);
         }
 
-        public static Guid? GetUserId(this ClaimsPrincipal principal)
-        {
-            var sub = principal.FindFirstValue(SubClaimType);
-            return Guid.TryParse(sub, out var id) ? id : null;
-        }
-
         public static string? GetEmail(this ClaimsPrincipal principal)
         {
             return principal.FindFirstValue(EmailClaimType);
@@ -302,11 +312,6 @@ namespace MySolution.WebApi.Services.Accounts
         public static bool HasRole(this ClaimsPrincipal principal, string role)
         {
             return principal.FindAll(RoleClaimType).Any(c => c.Value == role);
-        }
-
-        public static bool HasUserId(this ClaimsPrincipal principal)
-        {
-            return principal.GetUserId().HasValue;
         }
     }
 }

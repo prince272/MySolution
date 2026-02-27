@@ -15,8 +15,8 @@ namespace MySolution.WebApi.Libraries.CacheProvider
 
         public MemoryCacheProvider(IMemoryCache cache, IOptions<MemoryCacheProviderOptions> options)
         {
-            _options = options.Value;
             _cache = cache;
+            _options = options.Value;
         }
 
         public Task<T> GetAsync<T>(string key, Func<Task<T>> acquire)
@@ -28,10 +28,12 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             ArgumentNullException.ThrowIfNull(acquire, nameof(acquire));
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cacheTime, TimeSpan.Zero, nameof(cacheTime));
 
-            if (_cache.TryGetValue(key, out T? cacheEntry)) return cacheEntry ?? default!;
+            if (_cache.TryGetValue(key, out T? cacheEntry))
+                return cacheEntry ?? default!;
 
             var semaphore = CacheEntries.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
             await semaphore.WaitAsync();
+
             try
             {
                 if (!_cache.TryGetValue(key, out cacheEntry))
@@ -48,6 +50,7 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             return cacheEntry ?? default!;
         }
 
+
         public Task<T> SetAsync<T>(string key, Func<Task<T>> acquire)
             => SetAsync(key, acquire, _options.CacheTimeSpan);
 
@@ -59,6 +62,7 @@ namespace MySolution.WebApi.Libraries.CacheProvider
 
             var semaphore = CacheEntries.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
             await semaphore.WaitAsync();
+
             try
             {
                 var cacheEntry = await acquire();
@@ -71,11 +75,54 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             }
         }
 
+        public async Task<long> IncrementAsync(string key, long value = 1, TimeSpan? cacheTime = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(key, nameof(key));
+
+            if (cacheTime.HasValue)
+            {
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cacheTime.Value, TimeSpan.Zero, nameof(cacheTime));
+            }
+
+            var effectiveCacheTime = cacheTime ?? _options.CacheTimeSpan;
+
+            var semaphore = CacheEntries.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+            await semaphore.WaitAsync();
+
+            try
+            {
+                long currentValue = 0;
+
+                if (_cache.TryGetValue(key, out long existing))
+                    currentValue = existing;
+
+                currentValue += value;
+
+                _cache.Set(key, currentValue,
+                    GetMemoryCacheEntryOptions(effectiveCacheTime));
+
+                return currentValue;
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        }
+
+        public Task<long> DecrementAsync(string key, long value = 1, TimeSpan? cacheTime = null)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(key, nameof(key));
+
+            return IncrementAsync(key, -value, cacheTime);
+        }
+
         public Task RemoveAsync(string key)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(key, nameof(key));
 
             _cache.Remove(key);
+            CacheEntries.TryRemove(key, out _);
+
             return Task.CompletedTask;
         }
 
@@ -83,11 +130,16 @@ namespace MySolution.WebApi.Libraries.CacheProvider
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(prefix, nameof(prefix));
 
-            var entriesToRemove = CacheEntries
-                .Where(x => x.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            var keys = CacheEntries.Keys
+                .Where(k => k.StartsWith(prefix,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToList();
 
-            foreach (var entry in entriesToRemove)
-                _cache.Remove(entry.Key);
+            foreach (var key in keys)
+            {
+                _cache.Remove(key);
+                CacheEntries.TryRemove(key, out _);
+            }
 
             return Task.CompletedTask;
         }
@@ -96,6 +148,8 @@ namespace MySolution.WebApi.Libraries.CacheProvider
         {
             foreach (var key in CacheEntries.Keys.ToList())
                 _cache.Remove(key);
+
+            CacheEntries.Clear();
 
             _resetCacheToken.Cancel();
             _resetCacheToken.Dispose();
@@ -110,8 +164,8 @@ namespace MySolution.WebApi.Libraries.CacheProvider
             {
                 AbsoluteExpirationRelativeToNow = cacheTime
             }
-                .AddExpirationToken(new CancellationChangeToken(_resetCacheToken.Token))
-                .RegisterPostEvictionCallback(PostEvictionCallback);
+            .AddExpirationToken(new CancellationChangeToken(_resetCacheToken.Token))
+            .RegisterPostEvictionCallback(PostEvictionCallback);
         }
 
         private void PostEvictionCallback(object key, object? value, EvictionReason reason, object? state)

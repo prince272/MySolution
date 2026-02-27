@@ -8,5 +8,6 @@ namespace MySolution.WebApi.Libraries.Globalizer
         RegionInfo Region { get; }
         TimeProvider Time { get; }
         DeviceProvider Device { get; }
+        HttpUserProvider User { get; }
     }
 }

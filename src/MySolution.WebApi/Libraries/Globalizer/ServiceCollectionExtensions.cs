@@ -8,13 +8,17 @@ namespace MySolution.WebApi.Libraries.Globalizer
         {
             ArgumentNullException.ThrowIfNull(services, nameof(services));
 
+            services.AddHttpContextAccessor();
+            services.AddScoped<HttpUserProvider>();
             services.AddScoped<IGlobalizer>(provider =>
             {
                 return new DefaultGlobalizer(
                     timeProvider: TimeProvider.System,
                     deviceProvider: DeviceProvider.System,
+                    userProvider: provider.GetRequiredService<HttpUserProvider>(),
                     culture: CultureInfo.CurrentCulture);
             });
+
             return services;
         }
     }

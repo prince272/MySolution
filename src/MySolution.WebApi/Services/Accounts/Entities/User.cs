@@ -3,7 +3,7 @@
     public class User
     {
         // Identity
-        public Guid Id { get; set; }
+        public string Id { get; set; } = null!;
         public string UserName { get; set; } = null!;
         public string? Email { get; set; }
         public bool EmailVerified { get; set; }

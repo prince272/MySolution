@@ -23,15 +23,15 @@ namespace MySolution.WebApi.Services.Accounts.Models
                 {
                     if (string.IsNullOrWhiteSpace(username)) return;
 
-                    var type = ContactHelper.DetectContactType(username);
+                    var type = StringParser.DetectContactType(username);
 
                     var isValid = type switch
                     {
                         ContactType.Email =>
-                            ContactHelper.TryParseEmail(username, out _),
+                            StringParser.TryParseEmail(username, out _),
 
                         ContactType.PhoneNumber =>
-                            ContactHelper.TryParsePhoneNumber(username, currentRegionCode, out _),
+                            StringParser.TryParsePhoneNumber(username, currentRegionCode, out _),
 
                         _ => false
                     };

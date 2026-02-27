@@ -37,8 +37,10 @@ namespace MySolution.WebApi.Services.Accounts.Repositories
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        public async Task<User?> GetByIdAsync(string id, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(id, nameof(id));
+
             return await _dbContext.Set<User>()
                 .Include(u => u.Roles)
                 .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
@@ -53,8 +55,10 @@ namespace MySolution.WebApi.Services.Accounts.Repositories
                 .FirstOrDefaultAsync(u => u.Email!.ToLower() == normalized || u.PhoneNumber!.ToLower() == normalized, cancellationToken);
         }
 
-        public async Task<bool> ExistsByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        public async Task<bool> ExistsByIdAsync(string id, CancellationToken cancellationToken = default)
         {
+            ArgumentNullException.ThrowIfNull(id, nameof(id));
+
             return await _dbContext.Set<User>()
                 .AnyAsync(u => u.Id == id, cancellationToken);
         }
@@ -98,7 +102,7 @@ namespace MySolution.WebApi.Services.Accounts.Repositories
                 .Where(r => !existingRoleNames.Contains(r))
                 .Select(r => new Role
                 {
-                    Id = Guid.NewGuid(),
+                    Id = Guid.NewGuid().ToString(),
                     Name = r
                 })
                 .ToList();
@@ -144,9 +148,9 @@ namespace MySolution.WebApi.Services.Accounts.Repositories
         Task AddAsync(User user, CancellationToken cancellationToken = default);
         Task UpdateAsync(User user, CancellationToken cancellationToken = default);
         Task RemoveAsync(User user, CancellationToken cancellationToken = default);
-        Task<User?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+        Task<User?> GetByIdAsync(string id, CancellationToken cancellationToken = default);
         Task<User?> GetByEmailOrPhoneAsync(string emailOrPhone, CancellationToken cancellationToken = default);
-        Task<bool> ExistsByIdAsync(Guid id, CancellationToken cancellationToken = default);
+        Task<bool> ExistsByIdAsync(string id, CancellationToken cancellationToken = default);
         Task<bool> ExistsByEmailOrPhoneAsync(string emailOrPhone, CancellationToken cancellationToken = default);
         Task<bool> ExistsByUserNameAsync(string userName, CancellationToken cancellationToken = default);
         Task AddRolesAsync(User user, IEnumerable<RoleName> roleNames, CancellationToken cancellationToken = default);

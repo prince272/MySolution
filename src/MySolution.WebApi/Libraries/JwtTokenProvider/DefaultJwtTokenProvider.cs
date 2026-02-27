@@ -50,7 +50,7 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
 
             var tokenEntity = new JwtToken
             {
-                Id = Guid.NewGuid(),
+                Id = Guid.NewGuid().ToString(),
                 Subject = subject,
                 IssuedAt = currentTime,
                 AccessTokenHash = CryptoHelper.GenerateHash(accessToken),

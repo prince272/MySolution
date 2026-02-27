@@ -2,7 +2,7 @@
 {
     public class JwtToken
     {
-        public Guid Id { get; set; }
+        public string Id { get; set; } = null!;
         public string Subject { get; set; } = null!;
         public DateTimeOffset IssuedAt { get; set; }
         public string AccessTokenHash { get; set; } = null!;

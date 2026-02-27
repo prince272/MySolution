@@ -7,12 +7,12 @@ namespace MySolution.WebApi.Libraries.Validator
     {
         public static IRuleBuilderOptions<T, string> Email<T>(this IRuleBuilder<T, string> ruleBuilder)
         {
-            return ruleBuilder.Must((value) => ContactHelper.TryParseEmail(value, out var _)).WithMessage("'{PropertyName}' is not valid.");
+            return ruleBuilder.Must((value) => StringParser.TryParseEmail(value, out var _)).WithMessage("'{PropertyName}' is not valid.");
         }
 
         public static IRuleBuilderOptions<T, string> PhoneNumber<T>(this IRuleBuilder<T, string> ruleBuilder, string? regionCode = null)
         {
-            return ruleBuilder.Must((value) => ContactHelper.TryParsePhoneNumber(value, regionCode, out var _)).WithMessage("'{PropertyName}' is not valid.");
+            return ruleBuilder.Must((value) => StringParser.TryParsePhoneNumber(value, regionCode, out var _)).WithMessage("'{PropertyName}' is not valid.");
         }
 
         // How can I create strong passwords with FluentValidation?
