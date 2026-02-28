@@ -1,10 +1,13 @@
 ﻿using FluentValidation;
+using System.Diagnostics.CodeAnalysis;
 
 namespace MySolution.WebApi.Services.Accounts.Models
 {
     public class SignOutForm
     {
         public string? RefreshToken { get; set; }
+
+        [MemberNotNullWhen(false, nameof(RefreshToken))]
         public bool RevokeAllTokens { get; set; }
     }
 
@@ -12,9 +15,7 @@ namespace MySolution.WebApi.Services.Accounts.Models
     {
         public SignOutFormValidator()
         {
-            RuleFor(x => x.RefreshToken)
-                .NotEmpty()
-                .When(x => !x.RevokeAllTokens);
+            RuleFor(_ => _.RefreshToken).NotEmpty().When(_ => !_.RevokeAllTokens);
         }
     }
 }

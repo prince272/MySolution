@@ -28,11 +28,11 @@ namespace MySolution.WebApi.Services.Accounts
         private readonly ICacheProvider _cacheProvider;
 
         public AccountService(
-            IUserRepository userRepository, 
-            IValidator validator, 
-            IMapper mapper, 
-            IGlobalizer globalizer, 
-            IJwtTokenProvider jwtTokenProvider, 
+            IUserRepository userRepository,
+            IValidator validator,
+            IMapper mapper,
+            IGlobalizer globalizer,
+            IJwtTokenProvider jwtTokenProvider,
             IViewRenderer viewRenderer,
             IEnumerable<IMessageSender> messageSender,
             ICacheProvider cacheProvider)
@@ -59,7 +59,7 @@ namespace MySolution.WebApi.Services.Accounts
 
                 if (userExists)
                 {
-                    validatorResult.AddError(() => form.Username, $"'{StringParser.DetectContactType(form.Username)?.Humanize() ?? "Username"}' already exists.");
+                    validatorResult.AddError(() => form.Username, $"'{StringParser.ParseContactType(form.Username).Humanize()}' already exists.");
                 }
             }
 
@@ -76,6 +76,7 @@ namespace MySolution.WebApi.Services.Accounts
                 LastName = form.LastName,
                 UserName = await TextHelper.GenerateUniqueSlugAsync(form.Username, _userRepository.ExistsByUserNameAsync, cancellationToken: cancellationToken),
                 Email = StringParser.TryParseEmail(form.Username, out var emailInfo) ? emailInfo.Address : null,
+                PhoneNumber = StringParser.TryParsePhoneNumber(form.Username, currentRegionCode, out var phoneInfo) ? phoneInfo.NationalNumber : null,
                 HasPassword = true,
                 PasswordHash = CryptoHelper.GenerateHash(form.Password),
                 CreatedAt = currentTime,
@@ -103,7 +104,7 @@ namespace MySolution.WebApi.Services.Accounts
 
                 if (user == null)
                 {
-                    validatorResult.AddError(() => form.Username, $"'{StringParser.DetectContactType(form.Username)?.Humanize() ?? "Username"}' does not exist.");
+                    validatorResult.AddError(() => form.Username, $"'{StringParser.ParseContactType(form.Username).Humanize()}' does not exist.");
                 }
             }
 
@@ -115,7 +116,6 @@ namespace MySolution.WebApi.Services.Accounts
                 {
                     validatorResult.AddError(() => form.Password, "'Password' is incorrect.");
                 }
-
             }
 
             if (!validatorResult.IsValid)
@@ -136,7 +136,7 @@ namespace MySolution.WebApi.Services.Accounts
 
             if (!validatorResult.ContainsErrorKey(() => form.RefreshToken))
             {
-                var claimsPrincipal = await _jwtTokenProvider.ValidateTokenAsync(JwtTokenTypes.RefreshToken, form.RefreshToken, cancellationToken);
+                var claimsPrincipal = await _jwtTokenProvider.ValidateRefreshTokenAsync(form.RefreshToken, cancellationToken);
                 var userId = claimsPrincipal?.GetSubject();
                 user = !string.IsNullOrWhiteSpace(userId) ? await _userRepository.GetByIdAsync(userId, cancellationToken) : null;
 
@@ -149,7 +149,7 @@ namespace MySolution.WebApi.Services.Accounts
             if (!validatorResult.IsValid)
                 return TypedResults.ValidationProblem(validatorResult.Errors);
 
-            await _jwtTokenProvider.RevokeTokenAsync(user!.Id.ToString(), form.RefreshToken, cancellationToken);
+            await _jwtTokenProvider.RevokeRefreshTokenAsync(user!.Id.ToString(), form.RefreshToken, cancellationToken);
             var token = await _jwtTokenProvider.CreateTokenAsync(user!.Id.ToString(), user.GetUserClaims(), cancellationToken);
             var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
             return TypedResults.Ok(userModel);
@@ -160,9 +160,7 @@ namespace MySolution.WebApi.Services.Accounts
             ArgumentNullException.ThrowIfNull(form, nameof(form));
 
             if (!_globalizer.User.IsAuthenticated)
-            {
                 return TypedResults.Unauthorized();
-            }
 
             var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
 
@@ -172,10 +170,11 @@ namespace MySolution.WebApi.Services.Accounts
             if (form.RevokeAllTokens)
             {
                 await _jwtTokenProvider.RevokeAllTokensAsync(_globalizer.User.Id, cancellationToken);
+                await _jwtTokenProvider.ResetSecurityStampAsync(_globalizer.User.Id, cancellationToken);
             }
             else
             {
-                await _jwtTokenProvider.RevokeTokenAsync(_globalizer.User.Id, form.RefreshToken!, cancellationToken);
+                await _jwtTokenProvider.RevokeRefreshTokenAsync(_globalizer.User.Id, form.RefreshToken, cancellationToken);
             }
 
             return TypedResults.Ok();
@@ -184,9 +183,7 @@ namespace MySolution.WebApi.Services.Accounts
         public async Task<Results<Ok<ProfileModel>, NotFound, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default)
         {
             if (!_globalizer.User.IsAuthenticated)
-            {
                 return TypedResults.Unauthorized();
-            }
 
             var user = await _userRepository.GetByIdAsync(_globalizer.User.Id);
 
@@ -211,19 +208,24 @@ namespace MySolution.WebApi.Services.Accounts
 
             if (form.Reason == VerificationCodeReason.ChangeAccount)
             {
-                var newUsernameExists = !string.IsNullOrWhiteSpace(form.NewUsername) && await _userRepository.ExistsByEmailOrPhoneAsync(form.NewUsername, cancellationToken);
-
+                var newUsernameExists = await _userRepository.ExistsByEmailOrPhoneAsync(form.NewUsername, cancellationToken);
                 if (newUsernameExists)
                 {
-                    validatorResult.AddError(() => form.NewUsername, $"'{StringParser.DetectContactType(form.NewUsername)?.Humanize() ?? "Username"}' is already in use.");
-                    return TypedResults.ValidationProblem(validatorResult.Errors);
+                    validatorResult.AddError(() => form.NewUsername, $"'{StringParser.ParseContactType(form.NewUsername).Humanize()}' already exists.");
                 }
             }
 
             if (!validatorResult.IsValid)
                 return TypedResults.ValidationProblem(validatorResult.Errors);
 
-            var contactType = StringParser.DetectContactType(form.Username) ?? throw new InvalidOperationException($"Unable to determine contact type for username '{form.Username}'.");
+            var targetUsername = form.Reason == VerificationCodeReason.ChangeAccount ? form.NewUsername : form.CurrentUsername;
+
+            var cooldownCacheKey = $"vc:cooldown:{targetUsername}:{form.Reason}".ToLowerInvariant();
+            var attemptCacheKey = $"vc:attempts:{targetUsername}:{form.Reason}".ToLowerInvariant();
+            var secretCacheKey = $"vc:secret:{targetUsername}:{form.Reason}".ToLowerInvariant();
+            var cooldown = TimeSpan.FromMinutes(2);
+
+            var contactType = StringParser.ParseContactType(targetUsername);
             var (channel, templatePrefix) = contactType switch
             {
                 ContactType.Email => (MessageChannel.Email, "Email"),
@@ -231,11 +233,7 @@ namespace MySolution.WebApi.Services.Accounts
                 _ => throw new InvalidOperationException($"Unsupported contact type '{contactType}'.")
             };
 
-            var cooldownKey = $"vc:cooldown:{form.Username}:{form.Reason}".ToLowerInvariant();
-            var attemptKey = $"vc:attempts:{form.Username}:{form.Reason}".ToLowerInvariant();
-            var cooldown = TimeSpan.FromMinutes(2);
-
-            var lastSent = await _cacheProvider.GetAsync(cooldownKey, () => Task.FromResult<DateTimeOffset?>(null));
+            var lastSent = await _cacheProvider.GetAsync(cooldownCacheKey, () => Task.FromResult<DateTimeOffset?>(null), cancellationToken);
 
             if (lastSent.HasValue)
             {
@@ -248,19 +246,17 @@ namespace MySolution.WebApi.Services.Accounts
                 }
             }
 
-            var attemptCount = await _cacheProvider.IncrementAsync(attemptKey, 1, TimeSpan.FromHours(1), cancellationToken);
+            var attemptCount = await _cacheProvider.IncrementAsync(attemptCacheKey, 1, TimeSpan.FromHours(1), cancellationToken);
 
             if (attemptCount > 5)
-            {
                 return TypedResults.Problem("Too many verification codes have been requested. Please try again later.");
-            }
 
-            var user = await _userRepository.GetByEmailOrPhoneAsync(form.Username, cancellationToken);
+            var user = await _userRepository.GetByEmailOrPhoneAsync(form.CurrentUsername, cancellationToken);
+            if (user == null) return TypedResults.Ok();
 
-            if (user == null)
-                return TypedResults.Ok();
+            var secretKey = CryptoHelper.GenerateRandomString(32, CharacterSet.Alphanumeric);
 
-            var secretKey = CryptoHelper.GenerateHash(string.Join(string.Empty, _globalizer.Device.Id, form.Username, form.Reason, form.NewUsername));
+            await _cacheProvider.SetAsync(secretCacheKey, () => Task.FromResult<string?>(secretKey), cooldown, cancellationToken);
 
             var subject = form.Reason switch
             {
@@ -269,17 +265,209 @@ namespace MySolution.WebApi.Services.Accounts
                 VerificationCodeReason.ResetPassword => "Reset your password",
                 _ => string.Empty
             };
+
             var code = CryptoHelper.GenerateCode(secretKey, _globalizer.Time.GetUtcNow());
-            var body = await _viewRenderer.RenderAsync($"{templatePrefix}/VerificationCode", (form, subject, code, user), cancellationToken: cancellationToken);
+            var body = await _viewRenderer.RenderAsync($"{templatePrefix}/VerificationCode", (form, subject, code), cancellationToken: cancellationToken);
 
             await _messageSender.SendAsync(channel, new Message
             {
-                To = form.Username,
+                To = targetUsername,
                 Subject = subject,
                 Body = body
             }, cancellationToken);
 
-            await _cacheProvider.SetAsync(cooldownKey, () => Task.FromResult<DateTimeOffset?>(_globalizer.Time.GetUtcNow()), cooldown, cancellationToken);
+            await _cacheProvider.SetAsync(cooldownCacheKey, () => Task.FromResult<DateTimeOffset?>(_globalizer.Time.GetUtcNow()), cooldown, cancellationToken);
+
+            return TypedResults.Ok();
+        }
+
+        public async Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> VerifyAccountAsync(VerifyAccountForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            var cooldownCacheKey = $"vc:cooldown:{form.CurrentUsername}:{VerificationCodeReason.VerifyAccount}".ToLowerInvariant();
+            var attemptCacheKey = $"vc:attempts:{form.CurrentUsername}:{VerificationCodeReason.VerifyAccount}".ToLowerInvariant();
+            var secretCacheKey = $"vc:secret:{form.CurrentUsername}:{VerificationCodeReason.VerifyAccount}".ToLowerInvariant();
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            if (!validatorResult.ContainsErrorKey(() => form.Code))
+            {
+                var secretKey = await _cacheProvider.GetAsync(secretCacheKey, () => Task.FromResult<string?>(null), cancellationToken);
+
+                var isCodeValid = secretKey != null && CryptoHelper.ValidateCode(secretKey, form.Code, _globalizer.Time.GetUtcNow());
+
+                if (!isCodeValid)
+                {
+                    validatorResult.AddError(() => form.Code, "'Code' is invalid or has expired.");
+                }
+            }
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            var user = await _userRepository.GetByEmailOrPhoneAsync(form.CurrentUsername, cancellationToken);
+            if (user == null) return TypedResults.Ok();
+
+            var contactType = StringParser.ParseContactType(form.CurrentUsername);
+
+            if (contactType == ContactType.Email)
+            {
+                user.EmailVerified = true;
+                user.EmailVerifiedAt = _globalizer.Time.GetUtcNow();
+            }
+            else if (contactType == ContactType.PhoneNumber)
+            {
+                user.PhoneNumberVerified = true;
+                user.PhoneNumberVerifiedAt = _globalizer.Time.GetUtcNow();
+            }
+
+            await _userRepository.UpdateAsync(user, cancellationToken);
+            await _jwtTokenProvider.ResetSecurityStampAsync(user.Id.ToString(), cancellationToken);
+
+            await _cacheProvider.RemoveAsync(cooldownCacheKey, cancellationToken);
+            await _cacheProvider.RemoveAsync(attemptCacheKey, cancellationToken);
+            await _cacheProvider.RemoveAsync(secretCacheKey, cancellationToken);
+
+            return TypedResults.Ok();
+        }
+
+        public async Task<Results<Ok, ValidationProblem, ProblemHttpResult>> ResetPasswordAsync(ResetPasswordForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            var cooldownCacheKey = $"vc:cooldown:{form.CurrentUsername}:{VerificationCodeReason.ResetPassword}".ToLowerInvariant();
+            var attemptCacheKey = $"vc:attempts:{form.CurrentUsername}:{VerificationCodeReason.ResetPassword}".ToLowerInvariant();
+            var secretCacheKey = $"vc:secret:{form.CurrentUsername}:{VerificationCodeReason.ResetPassword}".ToLowerInvariant();
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            if (!validatorResult.ContainsErrorKey(() => form.Code))
+            {
+                var secretKey = await _cacheProvider.GetAsync(secretCacheKey, () => Task.FromResult<string?>(null), cancellationToken);
+
+                var isCodeValid = secretKey != null && CryptoHelper.ValidateCode(secretKey, form.Code, _globalizer.Time.GetUtcNow());
+
+                if (!isCodeValid)
+                {
+                    validatorResult.AddError(() => form.Code, "'Code' is invalid or has expired.");
+                }
+            }
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            var user = await _userRepository.GetByEmailOrPhoneAsync(form.CurrentUsername, cancellationToken);
+            if (user == null) return TypedResults.Ok();
+
+            user.PasswordHash = CryptoHelper.GenerateHash(form.NewPassword);
+            user.HasPassword = true;
+            user.PasswordChangedAt = _globalizer.Time.GetUtcNow();
+            user.UpdatedAt = _globalizer.Time.GetUtcNow();
+
+            await _userRepository.UpdateAsync(user, cancellationToken);
+            await _jwtTokenProvider.ResetSecurityStampAsync(user.Id.ToString(), cancellationToken);
+
+            await _cacheProvider.RemoveAsync(cooldownCacheKey, cancellationToken);
+            await _cacheProvider.RemoveAsync(attemptCacheKey, cancellationToken);
+            await _cacheProvider.RemoveAsync(secretCacheKey, cancellationToken);
+
+            return TypedResults.Ok();
+        }
+
+        public async Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> ChangePasswordAsync(ChangePasswordForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            if (!_globalizer.User.IsAuthenticated)
+                return TypedResults.Unauthorized();
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            User? user = null;
+
+            if (!validatorResult.ContainsErrorKey(() => form.CurrentPassword))
+            {
+                user = await _userRepository.GetByIdAsync(_globalizer.User.Id, cancellationToken);
+
+                // A user may not have a password if they signed up via an external provider
+                var passwordVerified = user != null && user.HasPassword && CryptoHelper.ValidateHash(form.CurrentPassword, user.PasswordHash);
+
+                if (!passwordVerified)
+                {
+                    validatorResult.AddError(() => form.CurrentPassword, "'Current password' is incorrect.");
+                }
+            }
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            user!.PasswordHash = CryptoHelper.GenerateHash(form.NewPassword);
+            user.HasPassword = true;
+            user.PasswordChangedAt = _globalizer.Time.GetUtcNow();
+
+            await _userRepository.UpdateAsync(user, cancellationToken);
+            await _jwtTokenProvider.ResetSecurityStampAsync(user.Id.ToString(), cancellationToken);
+
+            return TypedResults.Ok();
+        }
+
+        public async Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> ChangeAccountAsync(ChangeAccountForm form, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(form, nameof(form));
+
+            if (!_globalizer.User.IsAuthenticated)
+                return TypedResults.Unauthorized();
+
+            var validatorResult = await _validator.ValidateAsync(form, cancellationToken);
+
+            var targetUsername = form.NewUsername;
+            var secretCacheKey = $"vc:secret:{targetUsername}:{VerificationCodeReason.ChangeAccount}".ToLowerInvariant();
+            var cooldownCacheKey = $"vc:cooldown:{targetUsername}:{VerificationCodeReason.ChangeAccount}".ToLowerInvariant();
+            var attemptCacheKey = $"vc:attempts:{targetUsername}:{VerificationCodeReason.ChangeAccount}".ToLowerInvariant();
+
+            if (!validatorResult.ContainsErrorKey(() => form.Code))
+            {
+                var secretKey = await _cacheProvider.GetAsync(secretCacheKey, () => Task.FromResult<string?>(null), cancellationToken);
+
+                var isCodeValid = secretKey != null && CryptoHelper.ValidateCode(secretKey, form.Code, _globalizer.Time.GetUtcNow());
+
+                if (!isCodeValid)
+                {
+                    validatorResult.AddError(() => form.Code, "'Code' is invalid or has expired.");
+                }
+            }
+
+            if (!validatorResult.IsValid)
+                return TypedResults.ValidationProblem(validatorResult.Errors);
+
+            var user = await _userRepository.GetByIdAsync(_globalizer.User.Id, cancellationToken);
+            if (user == null) return TypedResults.Problem("User not found.");
+
+            var contactType = StringParser.ParseContactType(form.NewUsername);
+
+            if (contactType == ContactType.Email)
+            {
+                user.Email = StringParser.TryParseEmail(form.NewUsername, out var emailInfo) ? emailInfo.Address : null;
+                user.EmailVerified = true;
+                user.EmailVerifiedAt = _globalizer.Time.GetUtcNow();
+            }
+            else if (contactType == ContactType.PhoneNumber)
+            {
+                var currentRegionCode = _globalizer.Region.TwoLetterISORegionName.ToUpperInvariant();
+                user.PhoneNumber = StringParser.TryParsePhoneNumber(form.NewUsername, currentRegionCode, out var phoneInfo) ? phoneInfo.NationalNumber : null;
+                user.PhoneNumberVerified = true;
+                user.PhoneNumberVerifiedAt = _globalizer.Time.GetUtcNow();
+            }
+
+            user.UpdatedAt = _globalizer.Time.GetUtcNow();
+
+            await _userRepository.UpdateAsync(user, cancellationToken);
+            await _jwtTokenProvider.ResetSecurityStampAsync(user.Id.ToString(), cancellationToken);
+
+            await _cacheProvider.RemoveAsync(cooldownCacheKey, cancellationToken);
+            await _cacheProvider.RemoveAsync(attemptCacheKey, cancellationToken);
+            await _cacheProvider.RemoveAsync(secretCacheKey, cancellationToken);
 
             return TypedResults.Ok();
         }
@@ -293,6 +481,10 @@ namespace MySolution.WebApi.Services.Accounts
         Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SignOutAsync(SignOutForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<ProfileModel>, NotFound, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default);
         Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> SendVerificationCodeAsync(SendVerificationCodeForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> VerifyAccountAsync(VerifyAccountForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem, ProblemHttpResult>> ResetPasswordAsync(ResetPasswordForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> ChangePasswordAsync(ChangePasswordForm form, CancellationToken cancellationToken = default);
+        Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> ChangeAccountAsync(ChangeAccountForm form, CancellationToken cancellationToken = default);
     }
 
     public static class ClaimsPrincipalExtensions

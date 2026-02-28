@@ -28,5 +28,34 @@ namespace MySolution.WebApi.Libraries.Validator
 
             return options;
         }
+
+        public static IRuleBuilderOptionsConditions<T, string> Username<T>(this IRuleBuilder<T, string> ruleBuilder, string currentRegionCode)
+        {
+            return ruleBuilder.Custom((username, context) =>
+            {
+                if (string.IsNullOrWhiteSpace(username)) return;
+
+                var displayName = context.DisplayName;
+                var usernameIndex = displayName.IndexOf("Username", StringComparison.OrdinalIgnoreCase);
+                var prefix = usernameIndex > 0 ? displayName[..usernameIndex].Trim() : string.Empty;
+
+                if (!StringParser.TryParseContactType(username, out var contactType))
+                {
+                    context.AddFailure(context.PropertyPath, $"'{displayName}' is not valid.");
+                    return;
+                }
+
+                var (isValid, baseLabel) = contactType switch
+                {
+                    ContactType.Email => (StringParser.TryParseEmail(username, out _), "Email"),
+                    ContactType.PhoneNumber => (StringParser.TryParsePhoneNumber(username, currentRegionCode, out _), "Phone number"),
+                    _ => (false, displayName)
+                };
+
+                var label = string.IsNullOrEmpty(prefix) ? baseLabel : $"{prefix} {baseLabel}";
+
+                if (!isValid) context.AddFailure(contactType.ToString(), $"'{label}' is not valid.");
+            });
+        }
     }
 }

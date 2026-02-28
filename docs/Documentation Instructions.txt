@@ -1,0 +1,86 @@
+C# Documentation Writing Style – Classes and Properties
+Class Documentation Style
+
+Start with a single sentence describing the class’s purpose.
+
+Example: “Represents a customer in the system with personal and contact information.”
+
+Use present tense and active voice.
+
+Prefer: “Calculates the total price of an order”
+
+Avoid: “This class was used to calculate…”
+
+Be concise and precise.
+
+Keep summaries to one or two sentences.
+
+Avoid repeating the class name unnecessarily.
+
+Instead of: “The Customer class stores customer data.”
+
+Prefer: “Stores customer data including name and email.”
+
+Focus on purpose and responsibility, not implementation.
+
+Good: “Manages user authentication and session information.”
+
+Avoid: “Contains a dictionary and a login method.”
+
+Add optional context or usage notes only if necessary.
+
+Example: “Used by the registration module to validate user input.”
+
+Use nouns that clearly define what the class represents.
+
+Prefer: “Order, Customer, Invoice”
+
+Avoid vague terms like “Manager, Data, Handler” unless unavoidable.
+
+Avoid subjective or evaluative language.
+
+Don’t say: “Efficient class for storing customers”
+
+Stick to factual description.
+
+Property Documentation Style
+
+Start with a phrase like “Gets or sets…” for standard properties.
+
+Example: “Gets or sets the customer’s email address.”
+
+Use present tense, descriptive nouns, and concise wording.
+
+Prefer: “Indicates whether the order has been shipped.”
+
+Avoid: “This property tells you if the order has been shipped.”
+
+Include context, format, or constraints only if necessary.
+
+Example: “A string up to 50 characters.”
+
+Example: “The date the customer registered.”
+
+Avoid repeating the property name unnecessarily.
+
+Instead of: “The FirstName property stores the first name of the customer”
+
+Prefer: “The customer’s first name.”
+
+For booleans, start with “Indicates whether…” or “Determines if…”
+
+Example: “Indicates whether the account is active.”
+
+For collections, describe the contents rather than the type.
+
+Example: “A list of orders associated with the customer.”
+
+Avoid: “A List<Order> property.”
+
+Be consistent in terminology and phrasing across all properties.
+
+If you say “Gets or sets” for one property, do it for all similar ones.
+
+Avoid implementation details.
+
+Don’t describe how the property works internally. Focus on what it represents.

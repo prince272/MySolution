@@ -23,32 +23,10 @@ namespace MySolution.WebApi.Services.Accounts.Models
             RuleFor(_ => _.FirstName).NotEmpty().MaximumLength(128);
             RuleFor(_ => _.LastName).MaximumLength(128);
 
-            RuleFor(x => x.Username)
-                .NotEmpty()
-                .MaximumLength(128)
-                .Custom((username, context) =>
-                {
-                    if (string.IsNullOrWhiteSpace(username)) return;
-
-                    var type = StringParser.DetectContactType(username);
-
-                    var isValid = type switch
-                    {
-                        ContactType.Email => StringParser.TryParseEmail(username, out var _),
-                        ContactType.PhoneNumber => StringParser.TryParsePhoneNumber(username, currentRegionCode, out var _),
-                        _ => false
-                    };
-
-                    if (!isValid) context.AddFailure(type?.ToString() ?? "Username", $"'{type switch
-                    {
-                        ContactType.Email => "Email",
-                        ContactType.PhoneNumber => "Phone number",
-                        _ => "Username"
-                    }}' is not valid.");
-                });
+            RuleFor(x => x.Username).NotEmpty().MaximumLength(128).Username(currentRegionCode);
 
             RuleFor(_ => _.Password).NotEmpty().MaximumLength(128).Password();
-            RuleFor(_ => _.ConfirmPassword).NotEmpty().MaximumLength(128).Equal(_ => _.Password);
+            RuleFor(_ => _.ConfirmPassword).NotEmpty().MaximumLength(128).Equal(_ => _.Password, StringComparer.Ordinal);
         }
     }
 }

@@ -7,8 +7,10 @@
         public string UserName { get; set; } = null!;
         public string? Email { get; set; }
         public bool EmailVerified { get; set; }
+        public DateTimeOffset? EmailVerifiedAt { get; set; }
         public string? PhoneNumber { get; set; }
         public bool PhoneNumberVerified { get; set; }
+        public DateTimeOffset? PhoneNumberVerifiedAt { get; set; }
 
         // Personal Info
         public string FirstName { get; set; } = null!;

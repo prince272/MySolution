@@ -1,6 +1,7 @@
 ﻿using FluentValidation;
 using MySolution.WebApi.Helpers;
 using MySolution.WebApi.Libraries.Globalizer;
+using MySolution.WebApi.Libraries.Validator;
 
 namespace MySolution.WebApi.Services.Accounts.Models
 {
@@ -16,42 +17,9 @@ namespace MySolution.WebApi.Services.Accounts.Models
         {
             var currentRegionCode = globalizer.Region.TwoLetterISORegionName.ToUpperInvariant();
 
-            RuleFor(x => x.Username)
-                .NotEmpty()
-                .MaximumLength(128)
-                .Custom((username, context) =>
-                {
-                    if (string.IsNullOrWhiteSpace(username)) return;
+            RuleFor(_ => _.Username).NotEmpty().MaximumLength(128).Username(currentRegionCode);
 
-                    var type = StringParser.DetectContactType(username);
-
-                    var isValid = type switch
-                    {
-                        ContactType.Email =>
-                            StringParser.TryParseEmail(username, out _),
-
-                        ContactType.PhoneNumber =>
-                            StringParser.TryParsePhoneNumber(username, currentRegionCode, out _),
-
-                        _ => false
-                    };
-
-                    if (!isValid)
-                    {
-                        context.AddFailure(
-                            type?.ToString() ?? "Username",
-                            $"'{type switch
-                            {
-                                ContactType.Email => "Email",
-                                ContactType.PhoneNumber => "Phone number",
-                                _ => "Username"
-                            }}' is not valid.");
-                    }
-                });
-
-            RuleFor(x => x.Password)
-                .NotEmpty()
-                .MaximumLength(128);
+            RuleFor(x => x.Password).NotEmpty().MaximumLength(128);
         }
     }
 }

@@ -11,7 +11,7 @@ namespace MySolution.WebApi.Services.Accounts.Models
     {
         public SignInWithRefreshTokenFormValidator()
         {
-            RuleFor(x => x.RefreshToken).NotEmpty();
+            RuleFor(_ => _.RefreshToken).NotEmpty();
         }
     }
 }

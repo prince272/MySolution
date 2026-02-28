@@ -20,13 +20,40 @@ namespace MySolution.WebApi.Helpers
         [GeneratedRegex(@"^[-+0-9() ]+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
         private static partial Regex PhonePatternRegex();
 
-        public static ContactType? DetectContactType(string? input)
+        public static bool TryParseContactType(string? input, [NotNullWhen(true)] out ContactType? contactType)
         {
-            if (string.IsNullOrWhiteSpace(input)) return null;
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                contactType = null;
+                return false;
+            }
+
             var candidate = input.Trim();
-            if (candidate.Contains('@')) return ContactType.Email;
-            if (PhonePatternRegex().IsMatch(candidate)) return ContactType.PhoneNumber;
-            return null;
+
+            if (candidate.Contains('@'))
+            {
+                contactType = ContactType.Email;
+                return true;
+            }
+
+            if (PhonePatternRegex().IsMatch(candidate))
+            {
+                contactType = ContactType.PhoneNumber;
+                return true;
+            }
+
+            contactType = null;
+            return false;
+        }
+
+        public static ContactType ParseContactType(string input)
+        {
+            ArgumentNullException.ThrowIfNull(input);
+
+            if (!TryParseContactType(input, out var contactType))
+                throw new InvalidOperationException("Unable to determine contact type.");
+
+            return contactType.Value;
         }
 
         public static bool TryParseEmail(string? input, [NotNullWhen(true)] out EmailInfo? info)

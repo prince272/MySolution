@@ -83,9 +83,10 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task RevokeExpiredTokensAsync(string subject, CancellationToken cancellationToken = default)
+        public async Task RevokeRefreshTokenAsync(string subject, string refreshToken, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(subject, nameof(subject));
+            ArgumentNullException.ThrowIfNull(refreshToken, nameof(refreshToken));
 
             var currentTime = _globalizer.Time.GetUtcNow();
 
@@ -97,33 +98,14 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
 
             _dbContext.Set<JwtToken>().RemoveRange(fullyExpiredTokens);
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
-        }
-
-        public async Task RevokeTokenAsync(string subject, string tokenString, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(subject, nameof(subject));
-            ArgumentNullException.ThrowIfNull(tokenString, nameof(tokenString));
-
-            var currentTime = _globalizer.Time.GetUtcNow();
-
-            var fullyExpiredTokens = await _dbContext.Set<JwtToken>()
-                .Where(t => t.Subject == subject &&
-                            t.AccessTokenExpiresAt < currentTime &&
-                            t.RefreshTokenExpiresAt < currentTime)
-                .ToListAsync(cancellationToken);
-
-            _dbContext.Set<JwtToken>().RemoveRange(fullyExpiredTokens);
-
-            if (!string.IsNullOrWhiteSpace(tokenString))
+            if (!string.IsNullOrWhiteSpace(refreshToken))
             {
-                var tokenHash = CryptoHelper.GenerateHash(tokenString);
+                var tokenHash = CryptoHelper.GenerateHash(refreshToken);
 
                 if (!string.IsNullOrWhiteSpace(tokenHash))
                 {
                     var tokenToRevoke = await _dbContext.Set<JwtToken>()
-                        .Where(t => t.Subject == subject &&
-                                    (t.AccessTokenHash == tokenHash || t.RefreshTokenHash == tokenHash))
+                        .Where(t => t.Subject == subject && (t.RefreshTokenHash == tokenHash))
                         .FirstOrDefaultAsync(cancellationToken);
 
                     if (tokenToRevoke != null)
@@ -136,17 +118,13 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        public async Task<ClaimsPrincipal?> ValidateTokenAsync(string tokenType, string tokenString, CancellationToken cancellationToken = default)
+        public async Task<ClaimsPrincipal?> ValidateRefreshTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
         {
-            ArgumentNullException.ThrowIfNull(tokenType, nameof(tokenType));
-            ArgumentNullException.ThrowIfNull(tokenString, nameof(tokenString));
-
-            if (!JwtTokenTypes.AllTypes.Contains(tokenType, StringComparer.InvariantCulture))
-                throw new ArgumentException($"Invalid token type '{tokenType}'.", nameof(tokenType));
+            ArgumentNullException.ThrowIfNull(refreshToken, nameof(refreshToken));
 
             try
             {
-                _logger.LogInformation("Validating {TokenType} token...", tokenType);
+                _logger.LogInformation("Validating refresh token...");
 
                 var tokenHandler = new JwtSecurityTokenHandler();
                 tokenHandler.MapInboundClaims = false;
@@ -167,13 +145,13 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.Zero,
 
-                    ValidTypes = [tokenType],
+                    ValidTypes = [JwtTokenTypes.RefreshToken],
 
                     NameClaimType = JwtRegisteredClaimNames.Sub,
                     RoleClaimType = "role",
                 };
 
-                var principal = tokenHandler.ValidateToken(tokenString, validationParameters, out var validatedToken);
+                var principal = tokenHandler.ValidateToken(refreshToken, validationParameters, out var validatedToken);
 
                 if (validatedToken is not JwtSecurityToken jwtToken)
                 {
@@ -191,7 +169,7 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
 
                 _logger.LogInformation("Token subject: {Subject}", subject);
 
-                if (!await ValidateTokenInDatabaseAsync(subject, tokenString, tokenType, cancellationToken))
+                if (!await ValidateRefreshTokenInDatabaseAsync(subject, refreshToken, cancellationToken))
                 {
                     _logger.LogWarning(
                         "Token validation failed: token not found in database (subject: {Subject}).",
@@ -216,30 +194,18 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
             }
         }
 
-        private async Task<bool> ValidateTokenInDatabaseAsync(string subject, string tokenString, string tokenType, CancellationToken cancellationToken = default)
+        private async Task<bool> ValidateRefreshTokenInDatabaseAsync(string subject, string refreshToken, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(subject, nameof(subject));
-            ArgumentNullException.ThrowIfNull(tokenType, nameof(tokenType));
-            ArgumentNullException.ThrowIfNull(tokenString, nameof(tokenString));
+            ArgumentNullException.ThrowIfNull(refreshToken, nameof(refreshToken));
 
-            if (!JwtTokenTypes.AllTypes.Contains(tokenType, StringComparer.InvariantCulture))
-                throw new ArgumentException($"Invalid token type '{tokenType}'.", nameof(tokenType));
-
-            var tokenHash = CryptoHelper.GenerateHash(tokenString);
+            var tokenHash = CryptoHelper.GenerateHash(refreshToken);
             var currentTime = _globalizer.Time.GetUtcNow();
 
             var query = _dbContext.Set<JwtToken>().Where(t => t.Subject == subject);
 
-            if (tokenType == JwtTokenTypes.AccessToken)
-            {
-                query = query.Where(t => t.AccessTokenHash == tokenHash &&
-                                         t.AccessTokenExpiresAt > currentTime);
-            }
-            else
-            {
-                query = query.Where(t => t.RefreshTokenHash == tokenHash &&
-                                         t.RefreshTokenExpiresAt > currentTime);
-            }
+            query = query.Where(t => t.RefreshTokenHash == tokenHash &&
+                                     t.RefreshTokenExpiresAt > currentTime);
 
             var tokenExists = await query.AnyAsync(cancellationToken);
             return tokenExists;

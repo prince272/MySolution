@@ -40,6 +40,9 @@ namespace MySolution.WebApi.Helpers
         public static bool ValidateCode(string secret, string code)
             => ValidateCodeWithOptions(secret, code, DateTimeOffset.UtcNow, DefaultCodeTimeStep, DefaultWindow, DefaultCodeHashAlgorithm);
 
+        public static bool ValidateCode(string secret, string code, DateTimeOffset timestamp)
+            => ValidateCodeWithOptions(secret, code, timestamp, DefaultCodeTimeStep, DefaultWindow, DefaultCodeHashAlgorithm);
+
         public static bool ValidateCodeWithOptions(string secret, string code, DateTimeOffset timestamp, int timeStep, int window, string hashAlgorithm = DefaultCodeHashAlgorithm)
         {
             string cleanCode = code.Trim();
@@ -177,10 +180,127 @@ namespace MySolution.WebApi.Helpers
             }
         }
 
-        public static bool ValidateHash(string password, string? hashedPassword)
+        public static bool ValidateHash(string input, string? hashedInput)
         {
-            return GenerateHash(password) == hashedPassword;
+            return GenerateHash(input) == hashedInput;
         }
+        #endregion
+
+        #region Random Generation
+        public static string GenerateRandomString(int length, CharacterSet characterSet)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
+
+            if (characterSet == CharacterSet.None)
+                throw new ArgumentException("At least one character set must be specified.", nameof(characterSet));
+
+            string characters = BuildCharacterPool(characterSet);
+
+            var chars = Enumerable.Range(0, length)
+                .Select(_ => characters[GenerateRandomNumber(0, characters.Length)]);
+
+            return string.Join(string.Empty, chars);
+        }
+
+        private static string BuildCharacterPool(CharacterSet characterSet)
+        {
+            var pool = new StringBuilder();
+
+            // WholeNumeric supersedes NaturalNumeric to avoid duplicates
+            if (characterSet.HasFlag(CharacterSet.WholeNumeric))
+                pool.Append("0123456789");
+            else if (characterSet.HasFlag(CharacterSet.NaturalNumeric))
+                pool.Append("123456789");
+
+            if (characterSet.HasFlag(CharacterSet.LowerAlpha))
+                pool.Append("abcdefghijklmnopqrstuvwyxz");
+
+            if (characterSet.HasFlag(CharacterSet.UpperAlpha))
+                pool.Append("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+
+            return pool.ToString();
+        }
+
+        public static class AesOperation
+        {
+            static AesOperation()
+            {
+                using Aes myAes = Aes.Create();
+
+                myAes.GenerateKey();
+                myAes.GenerateIV();
+
+                MachineKey = myAes.Key;
+                MachineIV = myAes.IV;
+            }
+
+            private static byte[] MachineKey { get; set; }
+            private static byte[] MachineIV { get; set; }
+
+            public static string Encrypt(string plainText)
+            {
+                return Convert.ToBase64String(EncryptStringToBytes(plainText, MachineKey, MachineIV));
+            }
+
+            public static string Decrypt(string cipherText)
+            {
+                return DecryptStringFromBytes(Convert.FromBase64String(cipherText), MachineKey, MachineIV);
+            }
+
+            private static byte[] EncryptStringToBytes(string plainText, byte[] Key, byte[] IV)
+            {
+                if (plainText == null || plainText.Length <= 0)
+                    throw new ArgumentNullException(nameof(plainText));
+                if (Key == null || Key.Length <= 0)
+                    throw new ArgumentNullException(nameof(Key));
+                if (IV == null || IV.Length <= 0)
+                    throw new ArgumentNullException(nameof(IV));
+
+                using Aes aesAlg = Aes.Create();
+                aesAlg.Key = Key;
+                aesAlg.IV = IV;
+
+                ICryptoTransform encryptor = aesAlg.CreateEncryptor(aesAlg.Key, aesAlg.IV);
+
+                using MemoryStream msEncrypt = new MemoryStream();
+                using CryptoStream csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write);
+                using StreamWriter swEncrypt = new StreamWriter(csEncrypt);
+
+                swEncrypt.Write(plainText);
+                swEncrypt.Flush();
+                csEncrypt.FlushFinalBlock();
+
+                return msEncrypt.ToArray();
+            }
+
+            private static string DecryptStringFromBytes(byte[] cipherText, byte[] Key, byte[] IV)
+            {
+                if (cipherText == null || cipherText.Length <= 0)
+                    throw new ArgumentNullException(nameof(cipherText));
+                if (Key == null || Key.Length <= 0)
+                    throw new ArgumentNullException(nameof(Key));
+                if (IV == null || IV.Length <= 0)
+                    throw new ArgumentNullException(nameof(IV));
+
+                using Aes aesAlg = Aes.Create();
+                aesAlg.Key = Key;
+                aesAlg.IV = IV;
+
+                ICryptoTransform decryptor = aesAlg.CreateDecryptor(aesAlg.Key, aesAlg.IV);
+
+                using MemoryStream msDecrypt = new MemoryStream(cipherText);
+                using CryptoStream csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read);
+                using StreamReader srDecrypt = new StreamReader(csDecrypt);
+
+                return srDecrypt.ReadToEnd();
+            }
+        }
+
+        public static int GenerateRandomNumber(int min, int max)
+        {
+            return RandomNumberGenerator.GetInt32(min, max);
+        }
+
         #endregion
 
         #region Internal Helpers
@@ -208,6 +328,22 @@ namespace MySolution.WebApi.Helpers
         };
 
         #endregion
+    }
+
+
+    [Flags]
+    public enum CharacterSet
+    {
+        None = 0,
+        NaturalNumeric = 1 << 0,  // 1  → "123456789"
+        WholeNumeric = 1 << 1,  // 2  → "0123456789"
+        LowerAlpha = 1 << 2,  // 4  → "abcdefghijklmnopqrstuvwyxz"
+        UpperAlpha = 1 << 3,  // 8  → "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+        // Convenience combinations
+        AnyAlpha = LowerAlpha | UpperAlpha,
+        Alphanumeric = WholeNumeric | LowerAlpha | UpperAlpha,
+        All = NaturalNumeric | WholeNumeric | LowerAlpha | UpperAlpha
     }
 
     public class TokenPayload<T>

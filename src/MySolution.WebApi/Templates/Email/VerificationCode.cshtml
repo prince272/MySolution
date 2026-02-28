@@ -1,6 +1,6 @@
 ﻿@using MySolution.WebApi.Services.Accounts.Entities
 @using MySolution.WebApi.Services.Accounts.Models
-@model (SendVerificationCodeForm Form, string Subject, string Code, User User)
+@model (SendVerificationCodeForm Form, string Subject, string Code)
 @{
     Layout = "Email/_Layout";
 }
@@ -11,7 +11,6 @@
     <td class="content-area">
         <h2 class="action-title">@Model.Subject</h2>
         <p class="main-message">
-            Hi <b>@Model.User.FirstName</b>,<br>
             Use the verification code below to @Model.Subject.ToLowerInvariant().<br>
             This code will expire in <strong>15 minutes</strong> for security reasons.
         </p>
