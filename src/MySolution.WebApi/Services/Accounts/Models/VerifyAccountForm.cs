@@ -4,19 +4,10 @@ using MySolution.WebApi.Libraries.Validator;
 
 namespace MySolution.WebApi.Services.Accounts.Models
 {
-    /// <summary>
-    /// Form for verifying a user account with a verification code.
-    /// </summary>
     public record VerifyAccountForm
     {
-        /// <summary>
-        /// Username of the account to verify. Must be provided and cannot exceed 128 characters.
-        /// </summary>
         public string CurrentUsername { get; set; } = null!;
         
-        /// <summary>
-        /// 6-digit verification code sent to the user for account verification. Must be exactly 6 digits.
-        /// </summary>
         public string Code { get; set; } = null!;
     }
 

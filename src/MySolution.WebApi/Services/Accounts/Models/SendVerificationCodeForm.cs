@@ -4,24 +4,10 @@ using MySolution.WebApi.Libraries.Validator;
 
 namespace MySolution.WebApi.Services.Accounts.Models
 {
-    /// <summary>
-    /// Form for requesting a verification code to be sent to the user.
-    /// </summary>
     public class SendVerificationCodeForm
     {
-        /// <summary>
-        /// Current username of the account requesting the verification code. Must be provided and cannot exceed 128 characters.
-        /// </summary>
         public string CurrentUsername { get; set; } = null!;
-        
-        /// <summary>
-        /// New username when the reason is for account change. Required only when Reason is ChangeAccount and cannot exceed 128 characters.
-        /// </summary>
         public string NewUsername { get; set; } = null!;
-        
-        /// <summary>
-        /// Reason for sending the verification code.
-        /// </summary>
         public VerificationCodeReason Reason { get; set; }
     }
 
