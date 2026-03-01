@@ -1,7 +1,7 @@
 ﻿@using MySolution.WebApi.Services.Accounts.Entities
 @using MySolution.WebApi.Services.Accounts.Models
-@model (SendVerificationCodeForm Form, string Subject, string Code)
+@model (SendSecurityCodeForm Form, string Subject, string Code)
 
-Use code: @Model.Code to @(Model.Subject.ToLowerInvariant()).
+Use security code @Model.Code to @(Model.Subject.ToLowerInvariant()).
 
 Never share this code with anyone.

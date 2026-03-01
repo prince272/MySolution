@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using FluentValidation;
+using System.ComponentModel.DataAnnotations;
 
 namespace MySolution.WebApi.Libraries.Validator
 {
@@ -11,19 +12,19 @@ namespace MySolution.WebApi.Libraries.Validator
             _serviceProvider = serviceProvider;
         }
 
-        public async Task<ValidatorResult<TModel>> ValidateAsync<TModel>(TModel model, CancellationToken ct = default)
+        public async Task<ValidatorResult<TModel>> ValidateAsync<TModel>(TModel model, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(model, nameof(model));
 
             var errors = new Dictionary<string, List<string>>();
+            var contextData = new Dictionary<string, object>();
 
-            // ✅ DataAnnotations validation
             CollectAnnotationErrors(model, errors);
+            await CollectFluentErrorsAsync(_serviceProvider, model, errors, contextData, cancellationToken);
 
-            // ✅ FluentValidation (optional)
-            await CollectFluentErrorsAsync(_serviceProvider, model, errors, ct);
-
-            return new ValidatorResult<TModel>(errors.ToDictionary(k => k.Key, v => v.Value.ToArray()));
+            return new ValidatorResult<TModel>(
+                errors.ToDictionary(k => k.Key, v => v.Value.ToArray()),
+                contextData);
         }
 
         private static void CollectAnnotationErrors<TModel>(TModel model, Dictionary<string, List<string>> errors)
@@ -57,32 +58,24 @@ namespace MySolution.WebApi.Libraries.Validator
             }
         }
 
-        private static async Task CollectFluentErrorsAsync<TModel>(
-            IServiceProvider serviceProvider,
-            TModel model,
-            Dictionary<string, List<string>> errors,
-            CancellationToken ct)
+        private static async Task CollectFluentErrorsAsync<TModel>(IServiceProvider serviceProvider, TModel model, Dictionary<string, List<string>> errors, Dictionary<string, object> contextData, CancellationToken cancellationToken)
         {
-
-            ArgumentNullException.ThrowIfNull(serviceProvider, nameof(serviceProvider));
-            ArgumentNullException.ThrowIfNull(model, nameof(model));
-            ArgumentNullException.ThrowIfNull(errors, nameof(errors));
-
             var fluentValidator = serviceProvider.GetService<FluentValidation.IValidator<TModel>>();
-
             if (fluentValidator != null)
             {
-                var fluentResult = await fluentValidator.ValidateAsync(model, ct);
+                var validationContext = new ValidationContext<TModel>(model);
+                var fluentResult = await fluentValidator.ValidateAsync(validationContext, cancellationToken);
 
                 foreach (var failure in fluentResult.Errors)
                 {
                     var key = failure.PropertyName ?? string.Empty;
-
                     if (!errors.TryGetValue(key, out var list))
                         errors[key] = list = [];
-
                     list.Add(failure.ErrorMessage);
                 }
+
+                foreach (var kvp in validationContext.RootContextData)
+                    contextData[kvp.Key] = kvp.Value;
             }
         }
     }

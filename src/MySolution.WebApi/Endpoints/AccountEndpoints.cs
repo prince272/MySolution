@@ -42,30 +42,20 @@ namespace MySolution.WebApi.Endpoints
                  .WithSummary("Update profile")
                  .WithDescription("Updates the profile details (first name, last name, bio, and more) of the authenticated user.");
 
-            group.MapPost("/send-code", SendVerificationCode)
-                 .WithName(nameof(SendVerificationCode))
-                 .WithSummary("Send verification code")
-                 .WithDescription("Sends a verification code to an email address or phone number for account verification, password reset, or email or phone number change.");
-
-            group.MapPost("/verify", VerifyAccount)
-                 .WithName(nameof(VerifyAccount))
-                 .WithSummary("Verify email or phone number")
-                 .WithDescription("Verifies an email address or phone number using a verification code.");
-
-            group.MapPost("/password/reset", ResetPassword)
-                 .WithName(nameof(ResetPassword))
-                 .WithSummary("Reset password")
-                 .WithDescription("Resets a user password using a verification code sent to an email address or phone number.");
+            group.MapPost("/send-code", SendSecurityCode)
+                 .WithName(nameof(SendSecurityCode))
+                 .WithSummary("Send security code")
+                 .WithDescription("Sends a security code to an email address or phone number for account verification, password reset, or email or phone number change.");
+            
+            group.MapPost("/verify-code", VerifySecurityCode)
+                    .WithName(nameof(VerifySecurityCode))
+                    .WithSummary("Verify security code")
+                    .WithDescription("Verifies a security code sent to an email address or phone number for account verification, password reset, or email or phone number change.");
 
             group.MapPost("/password/change", ChangePassword)
                  .WithName(nameof(ChangePassword))
                  .WithSummary("Change password")
                  .WithDescription("Changes the password of the authenticated user after verifying the current password.");
-
-            group.MapPost("/change", ChangeAccount)
-                 .WithName(nameof(ChangeAccount))
-                 .WithSummary("Change email or phone number")
-                 .WithDescription("Changes the authenticated user's email address or phone number after verifying a code sent to the new email address or phone number.");
         }
 
         public static Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccount(
@@ -109,25 +99,18 @@ namespace MySolution.WebApi.Endpoints
             return accountService.UpdateProfileAsync(form);
         }
 
-        public static Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> SendVerificationCode(
+        public static Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> SendSecurityCode(
             IAccountService accountService,
-            [FromBody] SendVerificationCodeForm form)
+            [FromBody] SendSecurityCodeForm form)
         {
-            return accountService.SendVerificationCodeAsync(form);
+            return accountService.SendSecurityCodeAsync(form);
         }
 
-        public static Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> VerifyAccount(
+        public static Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> VerifySecurityCode(
             IAccountService accountService,
-            [FromBody] VerifyAccountForm form)
+            [FromBody] VerifySecurityCodeForm form)
         {
-            return accountService.VerifyAccountAsync(form);
-        }
-
-        public static Task<Results<Ok, ValidationProblem, ProblemHttpResult>> ResetPassword(
-            IAccountService accountService,
-            [FromBody] ResetPasswordForm form)
-        {
-            return accountService.ResetPasswordAsync(form);
+            return accountService.VerifySecurityCodeAsync(form);
         }
 
         public static Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> ChangePassword(
@@ -135,13 +118,6 @@ namespace MySolution.WebApi.Endpoints
             [FromBody] ChangePasswordForm form)
         {
             return accountService.ChangePasswordAsync(form);
-        }
-
-        public static Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> ChangeAccount(
-            IAccountService accountService,
-            [FromBody] ChangeAccountForm form)
-        {
-            return accountService.ChangeAccountAsync(form);
         }
     }
 }

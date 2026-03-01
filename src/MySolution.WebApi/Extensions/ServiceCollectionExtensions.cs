@@ -8,6 +8,12 @@ namespace MySolution.WebApi.Extensions
         public static IServiceCollection AddServices(this IServiceCollection services)
         {
             // Register your services here
+            services.Configure<AccountServiceOptions>(options =>
+            {
+                options.Lockout.Enabled = true;
+                options.Lockout.MaxFailedAttempts = 5;
+                options.Lockout.Duration = TimeSpan.FromMinutes(15);
+            });
             services.AddScoped<IAccountService, AccountService>();
             return services;
         }

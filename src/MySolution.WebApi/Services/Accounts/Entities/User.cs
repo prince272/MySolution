@@ -27,6 +27,8 @@
         public string? PasswordHash { get; set; }
         public bool HasPassword { get; set; }
         public DateTimeOffset? PasswordChangedAt { get; set; }
+        public int AccessFailedCount { get; set; }
+        public DateTimeOffset? LockoutEndAt { get; set; }
         public ICollection<Role> Roles { get; set; } = [];
 
         // Audit

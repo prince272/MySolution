@@ -7,20 +7,18 @@ namespace MySolution.WebApi.Libraries.Validator
     public class ValidatorResult<T>
     {
         private readonly ConcurrentDictionary<string, string[]> _errors;
+        public IReadOnlyDictionary<string, object> ContextData { get; }
 
         public ValidatorResult()
         {
             _errors = new();
+            ContextData = new Dictionary<string, object>();
         }
 
-        public ValidatorResult(Dictionary<string, string[]> existingErrors)
+        public ValidatorResult(Dictionary<string, string[]> existingErrors, Dictionary<string, object> contextData)
         {
             _errors = new(existingErrors);
-        }
-
-        public ValidatorResult(ValidatorResult<T> existingResult)
-        {
-            _errors = new(existingResult.Errors);
+            ContextData = contextData;
         }
 
         public bool IsValid => _errors.IsEmpty;
@@ -41,20 +39,6 @@ namespace MySolution.WebApi.Libraries.Validator
                 addValue: [errorMessage],
                 updateValueFactory: (_, existing) => [.. existing, errorMessage]
             );
-        }
-
-        public async Task TryAddErrorAsync(
-            Expression<Func<T, object?>> expression,
-            T instance,
-            Func<object?, CancellationToken, Task<bool>> conditionFunc,
-            Func<object?, string> getErrorMessage,
-            CancellationToken cancellationToken = default)
-        {
-            var value = expression.Compile()(instance);
-            if (await conditionFunc(value, cancellationToken).ConfigureAwait(false))
-            {
-                AddError(expression, getErrorMessage(value));
-            }
         }
     }
 }

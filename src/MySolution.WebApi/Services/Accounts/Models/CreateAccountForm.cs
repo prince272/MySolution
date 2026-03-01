@@ -1,7 +1,9 @@
 ﻿using FluentValidation;
+using Humanizer;
 using MySolution.WebApi.Helpers;
 using MySolution.WebApi.Libraries.Globalizer;
 using MySolution.WebApi.Libraries.Validator;
+using MySolution.WebApi.Services.Accounts.Repositories;
 
 namespace MySolution.WebApi.Services.Accounts.Models
 {
@@ -16,14 +18,23 @@ namespace MySolution.WebApi.Services.Accounts.Models
 
     public class CreateAccountFormValidator : AbstractValidator<CreateAccountForm>
     {
-        public CreateAccountFormValidator(IGlobalizer globalizer)
+        public CreateAccountFormValidator(IGlobalizer globalizer, IUserRepository userRepository)
         {
             var currentRegionCode = globalizer.Region.TwoLetterISORegionName.ToUpperInvariant();
 
             RuleFor(_ => _.FirstName).NotEmpty().MaximumLength(128);
             RuleFor(_ => _.LastName).MaximumLength(128);
 
-            RuleFor(x => x.Username).NotEmpty().MaximumLength(128).Username(currentRegionCode);
+            RuleFor(_ => _.Username)
+                .NotEmpty()
+                .MaximumLength(128)
+                .Username(currentRegionCode)
+                .CustomAsync(async (username, context, cancellationToken) =>
+                {
+                    var exists = await userRepository.ExistsByEmailOrPhoneAsync(username, cancellationToken);
+                    if (exists)
+                        context.AddFailure(context.PropertyPath, $"'{StringParser.ParseContactType(username).Humanize()}' already exists.");
+                });
 
             RuleFor(_ => _.Password).NotEmpty().MaximumLength(128).Password();
             RuleFor(_ => _.ConfirmPassword).NotEmpty().MaximumLength(128).Equal(_ => _.Password, StringComparer.Ordinal);

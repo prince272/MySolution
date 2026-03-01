@@ -1,4 +1,5 @@
 ﻿using FluentValidation;
+using Humanizer;
 using MySolution.WebApi.Helpers;
 
 namespace MySolution.WebApi.Libraries.Validator
@@ -52,9 +53,9 @@ namespace MySolution.WebApi.Libraries.Validator
                     _ => (false, displayName)
                 };
 
-                var label = string.IsNullOrEmpty(prefix) ? baseLabel : $"{prefix} {baseLabel}";
+                var label = string.IsNullOrEmpty(prefix) ? baseLabel : $"{prefix} {baseLabel.Humanize(LetterCasing.LowerCase)}";
 
-                if (!isValid) context.AddFailure(contactType.ToString(), $"'{label}' is not valid.");
+                if (!isValid) context.AddFailure(context.PropertyPath, $"'{label}' is not valid.");
             });
         }
     }
