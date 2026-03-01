@@ -1,86 +1,103 @@
-C# Documentation Writing Style – Classes and Properties
-Class Documentation Style
+1. Form Classes (Request / Payload) Documentation Style
 
-Start with a single sentence describing the class’s purpose.
+Purpose: Describe what clients must submit when making a request.
 
-Example: “Represents a customer in the system with personal and contact information.”
+Key Features:
 
-Use present tense and active voice.
+Class summary: Short description of the form’s purpose.
 
-Prefer: “Calculates the total price of an order”
+Example: Form for user authentication with username and password.
 
-Avoid: “This class was used to calculate…”
+Property summaries:
 
-Be concise and precise.
+Describe what clients must provide and why.
 
-Keep summaries to one or two sentences.
+Include constraints (length, pattern, required/optional).
 
-Avoid repeating the class name unnecessarily.
+Use simple, direct language, in present tense.
 
-Instead of: “The Customer class stores customer data.”
+Avoid references to storage, getters/setters, or system behavior.
 
-Prefer: “Stores customer data including name and email.”
+Boolean properties:
 
-Focus on purpose and responsibility, not implementation.
+Use phrasing like Indicates whether… or Determines if….
 
-Good: “Manages user authentication and session information.”
+Collections:
 
-Avoid: “Contains a dictionary and a login method.”
+Describe what’s inside, not the type.
 
-Add optional context or usage notes only if necessary.
+Example: List of selected product IDs. (not IEnumerable<int> of product identifiers)
 
-Example: “Used by the registration module to validate user input.”
+Tone & style:
 
-Use nouns that clearly define what the class represents.
+Concise, present tense, and focused on input requirements, not implementation.
 
-Prefer: “Order, Customer, Invoice”
+2. Model Classes (Response) Documentation Style
 
-Avoid vague terms like “Manager, Data, Handler” unless unavoidable.
+Purpose: Describe what clients receive after an operation.
 
-Avoid subjective or evaluative language.
+Key Features:
 
-Don’t say: “Efficient class for storing customers”
+Class summary: Explain what the model represents.
 
-Stick to factual description.
+Example: User profile details returned after authentication or profile retrieval.
 
-Property Documentation Style
+Property summaries:
 
-Start with a phrase like “Gets or sets…” for standard properties.
+Describe what the property contains, including format if relevant.
 
-Example: “Gets or sets the customer’s email address.”
+Include constraints only if meaningful to clients (e.g., date format, status codes).
 
-Use present tense, descriptive nouns, and concise wording.
+Do not start with "The," "Gets or sets," or repeat the class name.
 
-Prefer: “Indicates whether the order has been shipped.”
+Use concise, present tense phrasing.
 
-Avoid: “This property tells you if the order has been shipped.”
+Boolean properties:
 
-Include context, format, or constraints only if necessary.
+Same as forms: Indicates whether… or Determines if….
 
-Example: “A string up to 50 characters.”
+Collections:
 
-Example: “The date the customer registered.”
+Describe contents, not type.
 
-Avoid repeating the property name unnecessarily.
+Example: Orders associated with the customer.
 
-Instead of: “The FirstName property stores the first name of the customer”
+Tone & style:
 
-Prefer: “The customer’s first name.”
+Focus on what is returned, not system logic.
 
-For booleans, start with “Indicates whether…” or “Determines if…”
+Present tense, active voice, consistent terminology.
 
-Example: “Indicates whether the account is active.”
+3. Shared Rules Across Forms and Models
 
-For collections, describe the contents rather than the type.
+Present tense & active voice:
 
-Example: “A list of orders associated with the customer.”
+Avoid past/future tense or passive constructions.
 
-Avoid: “A List<Order> property.”
+Conciseness:
 
-Be consistent in terminology and phrasing across all properties.
+Skip redundant class/property names in the summary.
 
-If you say “Gets or sets” for one property, do it for all similar ones.
+No implementation details:
 
-Avoid implementation details.
+Don’t explain how the system stores, calculates, or manages the data.
 
-Don’t describe how the property works internally. Focus on what it represents.
+Consistency:
+
+Maintain the same phrasing style for all classes and properties.
+
+Boolean properties always use Indicates whether… style.
+
+Collections describe contents, not type.
+
+Key Takeaways:
+
+Forms → “What clients must send” → constraints + purpose.
+
+Models → “What clients receive” → content + format.
+
+Property summaries → concise, present tense, consistent.
+
+Boolean & collections → descriptive phrasing.
+
+Class summaries → single sentence describing purpose.

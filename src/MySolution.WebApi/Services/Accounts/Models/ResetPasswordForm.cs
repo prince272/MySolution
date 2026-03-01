@@ -4,11 +4,29 @@ using MySolution.WebApi.Libraries.Validator;
 
 namespace MySolution.WebApi.Services.Accounts.Models
 {
+    /// <summary>
+    /// Form for resetting a user's password with verification code.
+    /// </summary>
     public record ResetPasswordForm
     {
+        /// <summary>
+        /// Current username of the account requesting password reset. Must be provided and cannot exceed 128 characters.
+        /// </summary>
         public string CurrentUsername { get; set; } = null!;
+        
+        /// <summary>
+        /// 6-digit verification code sent to the user for identity verification. Must be exactly 6 digits.
+        /// </summary>
         public string Code { get; set; } = null!;
+        
+        /// <summary>
+        /// New password to set for the account. Must be provided and cannot exceed 128 characters.
+        /// </summary>
         public string NewPassword { get; set; } = null!;
+        
+        /// <summary>
+        /// Confirmation of the new password. Must match the new password exactly and cannot exceed 128 characters.
+        /// </summary>
         public string ConfirmPassword { get; set; } = null!;
     }
 

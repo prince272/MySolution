@@ -5,9 +5,19 @@ using MySolution.WebApi.Libraries.Validator;
 
 namespace MySolution.WebApi.Services.Accounts.Models
 {
+    /// <summary>
+    /// Form for user authentication with username and password.
+    /// </summary>
     public record SignInForm
     {
+        /// <summary>
+        /// Username of the account attempting to sign in. Must be provided and cannot exceed 128 characters.
+        /// </summary>
         public string Username { get; set; } = null!;
+        
+        /// <summary>
+        /// Password for the account. Must be provided and cannot exceed 128 characters.
+        /// </summary>
         public string Password { get; set; } = null!;
     }
 

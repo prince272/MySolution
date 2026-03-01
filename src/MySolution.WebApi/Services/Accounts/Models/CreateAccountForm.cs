@@ -5,12 +5,34 @@ using MySolution.WebApi.Libraries.Validator;
 
 namespace MySolution.WebApi.Services.Accounts.Models
 {
+    /// <summary>
+    /// Form for creating a new user account.
+    /// </summary>
     public record CreateAccountForm
     {
+        /// <summary>
+        /// First name of the user. Must be provided and cannot exceed 128 characters.
+        /// </summary>
         public string FirstName { get; set; } = null!;
+        
+        /// <summary>
+        /// Last name of the user. Optional and cannot exceed 128 characters.
+        /// </summary>
         public string? LastName { get; set; }
+        
+        /// <summary>
+        /// Unique username for the account. Must be provided and cannot exceed 128 characters.
+        /// </summary>
         public string Username { get; set; } = null!;
+        
+        /// <summary>
+        /// Password for the account. Must be provided and cannot exceed 128 characters.
+        /// </summary>
         public string Password { get; set; } = null!;
+        
+        /// <summary>
+        /// Confirmation of the password. Must match the password exactly and cannot exceed 128 characters.
+        /// </summary>
         public string ConfirmPassword { get; set; } = null!;
     }
 
