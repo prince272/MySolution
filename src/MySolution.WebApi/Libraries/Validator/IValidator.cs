@@ -3,6 +3,6 @@
 
     public interface IValidator
     {
-        Task<ValidatorResult> ValidateAsync<TModel>(TModel model, CancellationToken ct = default);
+        Task<ValidatorResult<TModel>> ValidateAsync<TModel>(TModel model, CancellationToken ct = default);
     }
 }

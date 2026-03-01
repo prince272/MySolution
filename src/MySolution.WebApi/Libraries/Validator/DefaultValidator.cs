@@ -11,7 +11,7 @@ namespace MySolution.WebApi.Libraries.Validator
             _serviceProvider = serviceProvider;
         }
 
-        public async Task<ValidatorResult> ValidateAsync<TModel>(TModel model, CancellationToken ct = default)
+        public async Task<ValidatorResult<TModel>> ValidateAsync<TModel>(TModel model, CancellationToken ct = default)
         {
             ArgumentNullException.ThrowIfNull(model, nameof(model));
 
@@ -23,14 +23,14 @@ namespace MySolution.WebApi.Libraries.Validator
             // ✅ FluentValidation (optional)
             await CollectFluentErrorsAsync(_serviceProvider, model, errors, ct);
 
-            return new ValidatorResult
-            {
-                Errors = errors.ToDictionary(k => k.Key, v => v.Value.ToArray())
-            };
+            return new ValidatorResult<TModel>(errors.ToDictionary(k => k.Key, v => v.Value.ToArray()));
         }
 
         private static void CollectAnnotationErrors<TModel>(TModel model, Dictionary<string, List<string>> errors)
-        {
+        {          
+            ArgumentNullException.ThrowIfNull(model, nameof(model));
+            ArgumentNullException.ThrowIfNull(errors, nameof(errors));
+
             var context = new ValidationContext(model!);
             var results = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
 
@@ -63,6 +63,11 @@ namespace MySolution.WebApi.Libraries.Validator
             Dictionary<string, List<string>> errors,
             CancellationToken ct)
         {
+
+            ArgumentNullException.ThrowIfNull(serviceProvider, nameof(serviceProvider));
+            ArgumentNullException.ThrowIfNull(model, nameof(model));
+            ArgumentNullException.ThrowIfNull(errors, nameof(errors));
+
             var fluentValidator = serviceProvider.GetService<FluentValidation.IValidator<TModel>>();
 
             if (fluentValidator != null)

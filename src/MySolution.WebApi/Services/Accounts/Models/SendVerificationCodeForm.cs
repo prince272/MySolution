@@ -7,7 +7,7 @@ namespace MySolution.WebApi.Services.Accounts.Models
     public class SendVerificationCodeForm
     {
         public string CurrentUsername { get; set; } = null!;
-        public string NewUsername { get; set; } = null!;
+        public string? NewUsername { get; set; } = null!;
         public VerificationCodeReason Reason { get; set; }
     }
 
@@ -41,13 +41,10 @@ namespace MySolution.WebApi.Services.Accounts.Models
 
             RuleFor(_ => _.NewUsername)
                 .NotEmpty()
-                    .When(_ => _.Reason == VerificationCodeReason.ChangeAccount)
                 .MaximumLength(128)
-                    .When(_ => _.Reason == VerificationCodeReason.ChangeAccount)
                 .Username(currentRegionCode)
-                    .When(_ => _.Reason == VerificationCodeReason.ChangeAccount)
                 .NotEqual(_ => _.CurrentUsername, StringComparer.OrdinalIgnoreCase)
-                    .When(_ => _.Reason == VerificationCodeReason.ChangeAccount);
+                .When(_ => _.Reason == VerificationCodeReason.ChangeAccount, ApplyConditionTo.AllValidators);
         }
     }
 }

@@ -37,6 +37,11 @@ namespace MySolution.WebApi.Endpoints
                  .WithSummary("Get profile")
                  .WithDescription("Retrieves the profile details of the authenticated user.");
 
+            group.MapPost("/profile", UpdateProfile)
+                 .WithName(nameof(UpdateProfile))
+                 .WithSummary("Update profile")
+                 .WithDescription("Updates the profile details (first name, last name, bio, and more) of the authenticated user.");
+
             group.MapPost("/send-code", SendVerificationCode)
                  .WithName(nameof(SendVerificationCode))
                  .WithSummary("Send verification code")
@@ -95,6 +100,13 @@ namespace MySolution.WebApi.Endpoints
             IAccountService accountService)
         {
             return accountService.GetProfileAsync();
+        }
+
+        public static Task<Results<Ok<ProfileModel>, ValidationProblem, UnauthorizedHttpResult>> UpdateProfile(
+            IAccountService accountService,
+            [FromBody] UpdateProfileForm form)
+        {
+            return accountService.UpdateProfileAsync(form);
         }
 
         public static Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> SendVerificationCode(

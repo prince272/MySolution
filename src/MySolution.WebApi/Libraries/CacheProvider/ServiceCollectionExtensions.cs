@@ -4,7 +4,7 @@ namespace MySolution.WebApi.Libraries.CacheProvider
 {
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection AddMemoyCacheProvider(
+        public static IServiceCollection AddMemoryCacheProvider(
             this IServiceCollection services,
             Action<MemoryCacheProviderOptions>? configure = null)
         {

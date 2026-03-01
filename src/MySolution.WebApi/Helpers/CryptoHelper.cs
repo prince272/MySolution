@@ -180,8 +180,11 @@ namespace MySolution.WebApi.Helpers
             }
         }
 
-        public static bool ValidateHash(string input, string? hashedInput)
+        public static bool ValidateHash(string input, string hashedInput)
         {
+            ArgumentNullException.ThrowIfNull(input, nameof(input));
+            ArgumentNullException.ThrowIfNull(hashedInput, nameof(hashedInput));
+
             return GenerateHash(input) == hashedInput;
         }
         #endregion

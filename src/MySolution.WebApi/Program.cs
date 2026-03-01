@@ -33,9 +33,27 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
 builder.Services.AddSingleton(TimeProvider.System);
 
-// Add services to the container.
-builder.Services.AddDbContext<DefaultDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<DefaultDbContext>((serviceProvider, options) =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+
+    options.UseNpgsql(connectionString, npgsqlOptions =>
+    {
+        npgsqlOptions.CommandTimeout(30);
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorCodesToAdd: null);
+        npgsqlOptions.MigrationsAssembly(typeof(Program).Assembly.GetName().Name);
+    });
+
+    if (builder.Environment.IsDevelopment())
+    {
+        options.EnableSensitiveDataLogging();
+        options.EnableDetailedErrors();
+    }
+});
 
 builder.Services.AddOpenApi(options =>
 {
@@ -45,7 +63,7 @@ builder.Services.AddMapster();
 builder.Services.AddGlobalizer();
 builder.Services.AddValidators();
 builder.Services.AddViewRenderer();
-builder.Services.AddMemoyCacheProvider();
+builder.Services.AddMemoryCacheProvider();
 
 builder.Services.AddRepositories();
 builder.Services.AddServices();

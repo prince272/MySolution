@@ -89,33 +89,13 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
             ArgumentNullException.ThrowIfNull(refreshToken, nameof(refreshToken));
 
             var currentTime = _globalizer.Time.GetUtcNow();
+            var tokenHash = CryptoHelper.GenerateHash(refreshToken);
 
-            var fullyExpiredTokens = await _dbContext.Set<JwtToken>()
+            await _dbContext.Set<JwtToken>()
                 .Where(t => t.Subject == subject &&
-                            t.AccessTokenExpiresAt < currentTime &&
-                            t.RefreshTokenExpiresAt < currentTime)
-                .ToListAsync(cancellationToken);
-
-            _dbContext.Set<JwtToken>().RemoveRange(fullyExpiredTokens);
-
-            if (!string.IsNullOrWhiteSpace(refreshToken))
-            {
-                var tokenHash = CryptoHelper.GenerateHash(refreshToken);
-
-                if (!string.IsNullOrWhiteSpace(tokenHash))
-                {
-                    var tokenToRevoke = await _dbContext.Set<JwtToken>()
-                        .Where(t => t.Subject == subject && (t.RefreshTokenHash == tokenHash))
-                        .FirstOrDefaultAsync(cancellationToken);
-
-                    if (tokenToRevoke != null)
-                    {
-                        _dbContext.Set<JwtToken>().Remove(tokenToRevoke);
-                    }
-                }
-            }
-
-            await _dbContext.SaveChangesAsync(cancellationToken);
+                    (t.RefreshTokenHash == tokenHash ||           
+                     t.RefreshTokenExpiresAt < currentTime))  
+                .ExecuteDeleteAsync(cancellationToken);
         }
 
         public async Task<ClaimsPrincipal?> ValidateRefreshTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
@@ -202,13 +182,10 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
             var tokenHash = CryptoHelper.GenerateHash(refreshToken);
             var currentTime = _globalizer.Time.GetUtcNow();
 
-            var query = _dbContext.Set<JwtToken>().Where(t => t.Subject == subject);
-
-            query = query.Where(t => t.RefreshTokenHash == tokenHash &&
-                                     t.RefreshTokenExpiresAt > currentTime);
-
-            var tokenExists = await query.AnyAsync(cancellationToken);
-            return tokenExists;
+            return await _dbContext.Set<JwtToken>()
+                .AnyAsync(t => t.Subject == subject &&
+                               t.RefreshTokenHash == tokenHash &&
+                               t.RefreshTokenExpiresAt > currentTime, cancellationToken);
         }
 
         private string GenerateToken(string subject, string securityStamp, DateTimeOffset issuedAt, DateTimeOffset expiresAt, string tokenType, IEnumerable<Claim>? additionalClaims)
