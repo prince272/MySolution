@@ -1,9 +1,6 @@
 ﻿using FluentValidation;
-using Humanizer;
-using MySolution.WebApi.Helpers;
 using MySolution.WebApi.Libraries.Globalizer;
 using MySolution.WebApi.Libraries.Validator;
-using MySolution.WebApi.Services.Accounts.Entities;
 using MySolution.WebApi.Services.Accounts.Repositories;
 
 namespace MySolution.WebApi.Services.Accounts.Models

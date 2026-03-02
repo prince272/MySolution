@@ -93,8 +93,8 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
 
             await _dbContext.Set<JwtToken>()
                 .Where(t => t.Subject == subject &&
-                    (t.RefreshTokenHash == tokenHash ||           
-                     t.RefreshTokenExpiresAt < currentTime))  
+                    (t.RefreshTokenHash == tokenHash ||
+                     t.RefreshTokenExpiresAt < currentTime))
                 .ExecuteDeleteAsync(cancellationToken);
         }
 

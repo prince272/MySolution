@@ -4,7 +4,6 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using MySolution.WebApi.Services.Accounts;
-using MySolution.WebApi.Services.Accounts.Repositories;
 using System.Text;
 
 namespace MySolution.WebApi.Libraries.JwtTokenProvider

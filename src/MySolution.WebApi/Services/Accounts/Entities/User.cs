@@ -15,7 +15,7 @@
         // Personal Info
         public string FirstName { get; set; } = null!;
         public string? LastName { get; set; }
-        public string? FullName => string.IsNullOrWhiteSpace(LastName) ? FirstName : $"{FirstName} {LastName}".Trim();
+        public string? FullName => $"{FirstName} {LastName}".Trim();
         public string? Bio { get; set; }
         public DateOnly? DateOfBirth { get; set; }
         public Gender? Gender { get; set; }

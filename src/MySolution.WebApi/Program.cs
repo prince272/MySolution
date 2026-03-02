@@ -1,5 +1,6 @@
 using Mapster;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MySolution.WebApi.Data;
 using MySolution.WebApi.Endpoints;
@@ -12,9 +13,8 @@ using MySolution.WebApi.Libraries.MessageSender.Email;
 using MySolution.WebApi.Libraries.MessageSender.Sms;
 using MySolution.WebApi.Libraries.Validator;
 using MySolution.WebApi.Libraries.ViewRenderer;
-using MySolution.WebApi.Services.Accounts;
+using MySolution.WebApi.Options;
 using Scalar.AspNetCore;
-using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -30,8 +30,6 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 
     options.SerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
 });
-
-builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddDbContext<DefaultDbContext>((serviceProvider, options) =>
 {
@@ -72,13 +70,31 @@ builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
 })
-    .AddJwtTokenProvider(options => builder.Configuration.Bind("Authentication:Jwt", options));
+    .AddJwtTokenProvider(options => builder.Configuration.Bind("Authentication:Jwt", options))
+    .AddGoogle(options => builder.Configuration.Bind("Authentication:Google", options))
+    .AddCookie(IdentityConstants.ExternalScheme);
 
 builder.Services.AddEmailProvider(options => builder.Configuration.Bind("Messaging:Email", options))
                 .AddSmsSender(options => builder.Configuration.Bind("Messaging:Sms", options));
 
 builder.Services.AddAuthorization();
+
+builder.Services.Configure<AllowedOriginsOptions>(builder.Configuration);
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        var options = builder.Configuration.Get<AllowedOriginsOptions>()
+            ?? throw new InvalidOperationException("AllowedOrigins configuration not found.");
+
+        if (options.AllowAnyOrigin)
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        else
+            policy.WithOrigins(options.GetOrigins()).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+    });
+});
 
 var app = builder.Build();
 
@@ -96,6 +112,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 

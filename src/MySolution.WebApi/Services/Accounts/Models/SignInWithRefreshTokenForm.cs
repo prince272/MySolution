@@ -20,9 +20,7 @@ namespace MySolution.WebApi.Services.Accounts.Models
                 {
                     var claimsPrincipal = await jwtTokenProvider.ValidateRefreshTokenAsync(refreshToken, cancellationToken);
                     var userId = claimsPrincipal?.GetSubject();
-                    var user = !string.IsNullOrWhiteSpace(userId)
-                        ? await userRepository.GetByIdAsync(userId, cancellationToken)
-                        : null;
+                    var user = !string.IsNullOrWhiteSpace(userId) ? await userRepository.GetByIdAsync(userId, cancellationToken) : null;
 
                     if (user == null)
                     {

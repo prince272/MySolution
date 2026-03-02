@@ -1,8 +1,9 @@
 ﻿using Humanizer;
 using Mapster;
 using MapsterMapper;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using MySolution.WebApi.Helpers;
 using MySolution.WebApi.Libraries.CacheProvider;
@@ -11,6 +12,7 @@ using MySolution.WebApi.Libraries.JwtTokenProvider;
 using MySolution.WebApi.Libraries.MessageSender;
 using MySolution.WebApi.Libraries.Validator;
 using MySolution.WebApi.Libraries.ViewRenderer;
+using MySolution.WebApi.Options;
 using MySolution.WebApi.Services.Accounts.Entities;
 using MySolution.WebApi.Services.Accounts.Models;
 using MySolution.WebApi.Services.Accounts.Repositories;
@@ -29,6 +31,10 @@ namespace MySolution.WebApi.Services.Accounts
         private readonly IViewRenderer _viewRenderer;
         private readonly IEnumerable<IMessageSender> _messageSender;
         private readonly ICacheProvider _cacheProvider;
+        private readonly IAuthenticationSchemeProvider _authSchemeProvider;
+        private readonly IAuthenticationService _authService;
+        private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly IOptions<AllowedOriginsOptions> _allowedOriginsOptions;
 
         public AccountService(
             IUserRepository userRepository,
@@ -38,7 +44,11 @@ namespace MySolution.WebApi.Services.Accounts
             IJwtTokenProvider jwtTokenProvider,
             IViewRenderer viewRenderer,
             IEnumerable<IMessageSender> messageSender,
-            ICacheProvider cacheProvider)
+            ICacheProvider cacheProvider,
+            IAuthenticationSchemeProvider schemeProvider,
+            IAuthenticationService authService,
+            IHttpContextAccessor httpContextAccessor,
+            IOptions<AllowedOriginsOptions> allowedOriginsOptions)
         {
             _userRepository = userRepository;
             _validator = validator;
@@ -48,6 +58,10 @@ namespace MySolution.WebApi.Services.Accounts
             _viewRenderer = viewRenderer;
             _messageSender = messageSender;
             _cacheProvider = cacheProvider;
+            _authSchemeProvider = schemeProvider;
+            _authService = authService;
+            _httpContextAccessor = httpContextAccessor;
+            _allowedOriginsOptions = allowedOriginsOptions;
         }
 
         public async Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccountAsync(CreateAccountForm form, CancellationToken cancellationToken = default)
@@ -62,12 +76,14 @@ namespace MySolution.WebApi.Services.Accounts
             var currentTime = _globalizer.Time.GetUtcNow();
             var currentRegionCode = _globalizer.Region.TwoLetterISORegionName.ToUpperInvariant();
 
+            var fullName = $"{form.FirstName} {form.LastName}".Trim();
+
             var user = new User()
             {
                 Id = Guid.NewGuid().ToString(),
                 FirstName = form.FirstName,
                 LastName = form.LastName,
-                UserName = await TextHelper.GenerateUniqueSlugAsync(form.Username, _userRepository.ExistsByUserNameAsync, cancellationToken: cancellationToken),
+                UserName = await TextHelper.GenerateUniqueSlugAsync(fullName, _userRepository.ExistsByUserNameAsync, cancellationToken: cancellationToken),
                 Email = StringParser.TryParseEmail(form.Username, out var emailInfo) ? emailInfo.Address : null,
                 PhoneNumber = StringParser.TryParsePhoneNumber(form.Username, currentRegionCode, out var phoneInfo) ? phoneInfo.NationalNumber : null,
                 HasPassword = true,
@@ -115,6 +131,80 @@ namespace MySolution.WebApi.Services.Accounts
             return TypedResults.Ok(userModel);
         }
 
+        public async Task<Results<ChallengeHttpResult, ProblemHttpResult>> SignInWithProviderAsync(string provider, string returnUrl, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(provider, nameof(provider));
+            ArgumentNullException.ThrowIfNull(returnUrl, nameof(returnUrl));
+
+            var scheme = await _authSchemeProvider.GetSchemeAsync(provider);
+            if (scheme == null)
+                return TypedResults.Problem(title: $"'{provider}' is not a supported external provider.");
+
+            if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var returnUri) ||
+                (returnUri.Scheme != Uri.UriSchemeHttp && returnUri.Scheme != Uri.UriSchemeHttps))
+                return TypedResults.Problem(title: $"'{returnUrl}' is not a valid URL.");
+
+            var options = _allowedOriginsOptions.Value;
+            if (!options.AllowAnyOrigin)
+            {
+                var returnHost = returnUri.GetLeftPart(UriPartial.Authority);
+                if (!options.GetOrigins().Contains(returnHost, StringComparer.OrdinalIgnoreCase))
+                    return TypedResults.Problem(title: $"'{returnHost}' is not an allowed origin.");
+            }
+
+            return TypedResults.Challenge(new AuthenticationProperties { RedirectUri = returnUrl }, [scheme.Name]);
+        }
+
+        public async Task<Results<Ok<AccountModel>, ValidationProblem, ProblemHttpResult>> SignInWithProviderCallbackAsync(string provider, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(provider, nameof(provider));
+
+            var result = await _httpContextAccessor.HttpContext!.AuthenticateAsync(IdentityConstants.ExternalScheme);
+
+            if (!result.Succeeded || result.Principal == null)
+                return TypedResults.Problem(title: $"'{provider}' authentication failed.");
+
+            await _httpContextAccessor.HttpContext!.SignOutAsync(IdentityConstants.ExternalScheme);
+
+            var username = result.Principal.FindFirstValue(ClaimTypes.MobilePhone) ?? result.Principal.FindFirstValue(ClaimTypes.Email);
+            if (string.IsNullOrWhiteSpace(username))
+                return TypedResults.Problem(title: $"'{provider}' authentication failed.");
+
+            var firstName = result.Principal.FindFirstValue(ClaimTypes.GivenName)!;
+            var lastName = result.Principal.FindFirstValue(ClaimTypes.Surname);
+            var fullName = $"{firstName} {lastName}".Trim();
+
+            var user = await _userRepository.GetByEmailOrPhoneAsync(username, cancellationToken);
+
+            if (user == null)
+            {
+                var currentTime = _globalizer.Time.GetUtcNow();
+                var currentRegionCode = _globalizer.Region.TwoLetterISORegionName.ToUpperInvariant();
+
+                user = new User()
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    FirstName = firstName,
+                    LastName = lastName,
+                    UserName = await TextHelper.GenerateUniqueSlugAsync(fullName, _userRepository.ExistsByUserNameAsync, cancellationToken: cancellationToken),
+                    Email = StringParser.TryParseEmail(username, out var emailInfo) ? emailInfo.Address : null,
+                    PhoneNumber = StringParser.TryParsePhoneNumber(username, currentRegionCode, out var phoneInfo) ? phoneInfo.NationalNumber : null,
+                    HasPassword = false,
+                    PasswordHash = null,
+                    CreatedAt = currentTime,
+                    LastActiveAt = currentTime
+                };
+
+                await _userRepository.AddAsync(user, cancellationToken);
+                await _userRepository.AddRolesAsync(user, [RoleName.Viewer], cancellationToken);
+            }
+
+            var token = await _jwtTokenProvider.CreateTokenAsync(user.Id.ToString(), user.GetUserClaims(), cancellationToken);
+            var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
+            return TypedResults.Ok(userModel);
+        }
+
+
         public async Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SignOutAsync(SignOutForm form, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(form, nameof(form));
@@ -140,7 +230,7 @@ namespace MySolution.WebApi.Services.Accounts
             return TypedResults.Ok();
         }
 
-        public async Task<Results<Ok<ProfileModel>, NotFound, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default)
+        public async Task<Results<Ok<ProfileModel>, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default)
         {
             if (!_globalizer.User.IsAuthenticated)
                 return TypedResults.Unauthorized();
@@ -377,8 +467,10 @@ namespace MySolution.WebApi.Services.Accounts
         Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccountAsync(CreateAccountForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<AccountModel>, ValidationProblem>> SignInAsync(SignInForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshTokenAsync(SignInWithRefreshTokenForm form, CancellationToken cancellationToken = default);
+        Task<Results<ChallengeHttpResult, ProblemHttpResult>> SignInWithProviderAsync(string provider, string returnUrl, CancellationToken cancellationToken = default);
+        Task<Results<Ok<AccountModel>, ValidationProblem, ProblemHttpResult>> SignInWithProviderCallbackAsync(string provider, CancellationToken cancellationToken = default);
         Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SignOutAsync(SignOutForm form, CancellationToken cancellationToken = default);
-        Task<Results<Ok<ProfileModel>, NotFound, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default);
+        Task<Results<Ok<ProfileModel>, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default);
         Task<Results<Ok<ProfileModel>, ValidationProblem, UnauthorizedHttpResult>> UpdateProfileAsync(UpdateProfileForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> SendSecurityCodeAsync(SendSecurityCodeForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok, ValidationProblem, ProblemHttpResult, UnauthorizedHttpResult>> VerifySecurityCodeAsync(VerifySecurityCodeForm form, CancellationToken cancellationToken = default);

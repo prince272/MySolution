@@ -3,7 +3,6 @@ using MailKit.Security;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using MimeKit.Text;
-using System.Security.Principal;
 
 namespace MySolution.WebApi.Libraries.MessageSender.Email
 {

@@ -28,7 +28,7 @@ namespace MySolution.WebApi.Libraries.Validator
         }
 
         private static void CollectAnnotationErrors<TModel>(TModel model, Dictionary<string, List<string>> errors)
-        {          
+        {
             ArgumentNullException.ThrowIfNull(model, nameof(model));
             ArgumentNullException.ThrowIfNull(errors, nameof(errors));
 
