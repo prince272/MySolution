@@ -1,5 +1,6 @@
 using Mapster;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using MySolution.WebApi.Data;
@@ -74,7 +75,7 @@ builder.Services.AddAuthentication(options =>
 })
     .AddJwtTokenProvider(options => builder.Configuration.Bind("Authentication:Jwt", options))
     .AddGoogle(options => builder.Configuration.Bind("Authentication:Google", options))
-    .AddCookie(IdentityConstants.ExternalScheme);
+    .AddExternalCookie();
 
 builder.Services.AddEmailProvider(options => builder.Configuration.Bind("Messaging:Email", options))
                 .AddSmsSender(options => builder.Configuration.Bind("Messaging:Sms", options));

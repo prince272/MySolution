@@ -32,7 +32,6 @@ namespace MySolution.WebApi.Services.Accounts
         private readonly IEnumerable<IMessageSender> _messageSender;
         private readonly ICacheProvider _cacheProvider;
         private readonly IAuthenticationSchemeProvider _authSchemeProvider;
-        private readonly IAuthenticationService _authService;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IOptions<AllowedOriginsOptions> _allowedOriginsOptions;
 
@@ -46,7 +45,6 @@ namespace MySolution.WebApi.Services.Accounts
             IEnumerable<IMessageSender> messageSender,
             ICacheProvider cacheProvider,
             IAuthenticationSchemeProvider schemeProvider,
-            IAuthenticationService authService,
             IHttpContextAccessor httpContextAccessor,
             IOptions<AllowedOriginsOptions> allowedOriginsOptions)
         {
@@ -59,7 +57,6 @@ namespace MySolution.WebApi.Services.Accounts
             _messageSender = messageSender;
             _cacheProvider = cacheProvider;
             _authSchemeProvider = schemeProvider;
-            _authService = authService;
             _httpContextAccessor = httpContextAccessor;
             _allowedOriginsOptions = allowedOriginsOptions;
         }
@@ -131,42 +128,59 @@ namespace MySolution.WebApi.Services.Accounts
             return TypedResults.Ok(userModel);
         }
 
-        public async Task<Results<ChallengeHttpResult, ProblemHttpResult>> SignInWithProviderAsync(string provider, string returnUrl, CancellationToken cancellationToken = default)
+        public async Task<Results<Ok<SignInWithProviderModel>, ProblemHttpResult>> SignInWithProviderAsync(string provider, string callbackUrl, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(provider, nameof(provider));
-            ArgumentNullException.ThrowIfNull(returnUrl, nameof(returnUrl));
+            ArgumentNullException.ThrowIfNull(callbackUrl, nameof(callbackUrl));
 
             var scheme = await _authSchemeProvider.GetSchemeAsync(provider);
             if (scheme == null)
                 return TypedResults.Problem(title: $"'{provider}' is not a supported external provider.");
 
-            if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var returnUri) ||
-                (returnUri.Scheme != Uri.UriSchemeHttp && returnUri.Scheme != Uri.UriSchemeHttps))
-                return TypedResults.Problem(title: $"'{returnUrl}' is not a valid URL.");
+            if (!Uri.TryCreate(callbackUrl, UriKind.Absolute, out var callbackUri) ||
+                (callbackUri.Scheme != Uri.UriSchemeHttp && callbackUri.Scheme != Uri.UriSchemeHttps))
+                return TypedResults.Problem(title: $"'{callbackUrl}' is not a valid URL.");
 
             var options = _allowedOriginsOptions.Value;
             if (!options.AllowAnyOrigin)
             {
-                var returnHost = returnUri.GetLeftPart(UriPartial.Authority);
-                if (!options.GetOrigins().Contains(returnHost, StringComparer.OrdinalIgnoreCase))
-                    return TypedResults.Problem(title: $"'{returnHost}' is not an allowed origin.");
+                var callbackHost = callbackUri.GetLeftPart(UriPartial.Authority);
+                if (!options.GetOrigins().Contains(callbackHost, StringComparer.OrdinalIgnoreCase))
+                    return TypedResults.Problem(title: $"'{callbackHost}' is not an allowed origin.");
             }
 
-            return TypedResults.Challenge(new AuthenticationProperties { RedirectUri = returnUrl }, [scheme.Name]);
+            var httpContext = _httpContextAccessor.HttpContext!;
+            var authService = httpContext.RequestServices.GetRequiredService<IAuthenticationService>();
+
+            await authService.ChallengeAsync(
+                httpContext,
+                scheme.Name,
+                new AuthenticationProperties { RedirectUri = callbackUrl });
+
+            var redirectUrl = httpContext.Response.Headers.Location.FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(redirectUrl))
+                return TypedResults.Problem(title: $"'{provider}' handler did not produce a redirect URL.");
+
+            return TypedResults.Ok(new SignInWithProviderModel { RedirectUrl = redirectUrl });
         }
 
         public async Task<Results<Ok<AccountModel>, ValidationProblem, ProblemHttpResult>> SignInWithProviderCallbackAsync(string provider, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(provider, nameof(provider));
 
-            var result = await _httpContextAccessor.HttpContext!.AuthenticateAsync(IdentityConstants.ExternalScheme);
+            var httpContext = _httpContextAccessor.HttpContext!;
+            var authService = httpContext.RequestServices.GetRequiredService<IAuthenticationService>();
+
+            var result = await authService.AuthenticateAsync(httpContext, provider);
 
             if (!result.Succeeded || result.Principal == null)
                 return TypedResults.Problem(title: $"'{provider}' authentication failed.");
 
-            await _httpContextAccessor.HttpContext!.SignOutAsync(IdentityConstants.ExternalScheme);
+            await authService.SignOutAsync(httpContext, IdentityConstants.ExternalScheme, properties: null);
 
             var username = result.Principal.FindFirstValue(ClaimTypes.MobilePhone) ?? result.Principal.FindFirstValue(ClaimTypes.Email);
+
             if (string.IsNullOrWhiteSpace(username))
                 return TypedResults.Problem(title: $"'{provider}' authentication failed.");
 
@@ -174,11 +188,11 @@ namespace MySolution.WebApi.Services.Accounts
             var lastName = result.Principal.FindFirstValue(ClaimTypes.Surname);
             var fullName = $"{firstName} {lastName}".Trim();
 
+            var currentTime = _globalizer.Time.GetUtcNow();
             var user = await _userRepository.GetByEmailOrPhoneAsync(username, cancellationToken);
 
             if (user == null)
             {
-                var currentTime = _globalizer.Time.GetUtcNow();
                 var currentRegionCode = _globalizer.Region.TwoLetterISORegionName.ToUpperInvariant();
 
                 user = new User()
@@ -203,7 +217,6 @@ namespace MySolution.WebApi.Services.Accounts
             var userModel = _mapper.Map(token, _mapper.Map<AccountModel>(user));
             return TypedResults.Ok(userModel);
         }
-
 
         public async Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SignOutAsync(SignOutForm form, CancellationToken cancellationToken = default)
         {
@@ -367,9 +380,7 @@ namespace MySolution.WebApi.Services.Accounts
             var isCodeValid = secretKey != null && CryptoHelper.ValidateCode(secretKey, form.Code, _globalizer.Time.GetUtcNow());
 
             if (!isCodeValid)
-            {
                 return TypedResults.Problem(title: "Invalid or expired code.", statusCode: StatusCodes.Status400BadRequest);
-            }
 
             var user = (User)validatorResult.ContextData[nameof(User)];
             var contactType = StringParser.ParseContactType(targetUsername);
@@ -461,13 +472,12 @@ namespace MySolution.WebApi.Services.Accounts
         }
     }
 
-
     public interface IAccountService
     {
         Task<Results<Ok<AccountModel>, ValidationProblem>> CreateAccountAsync(CreateAccountForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<AccountModel>, ValidationProblem>> SignInAsync(SignInForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<AccountModel>, ValidationProblem>> SignInWithRefreshTokenAsync(SignInWithRefreshTokenForm form, CancellationToken cancellationToken = default);
-        Task<Results<ChallengeHttpResult, ProblemHttpResult>> SignInWithProviderAsync(string provider, string returnUrl, CancellationToken cancellationToken = default);
+        Task<Results<Ok<SignInWithProviderModel>, ProblemHttpResult>> SignInWithProviderAsync(string provider, string callbackUrl, CancellationToken cancellationToken = default);
         Task<Results<Ok<AccountModel>, ValidationProblem, ProblemHttpResult>> SignInWithProviderCallbackAsync(string provider, CancellationToken cancellationToken = default);
         Task<Results<Ok, ValidationProblem, UnauthorizedHttpResult>> SignOutAsync(SignOutForm form, CancellationToken cancellationToken = default);
         Task<Results<Ok<ProfileModel>, UnauthorizedHttpResult>> GetProfileAsync(CancellationToken cancellationToken = default);

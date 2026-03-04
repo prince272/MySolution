@@ -32,8 +32,8 @@ namespace MySolution.WebApi.Endpoints
                  .WithSummary("Sign in with Google")
                  .WithDescription("Initiates the Google OAuth authentication flow by redirecting the user to Google's sign-in page.");
 
-            group.MapGet("/signin/google/callback", HandleGoogleCallback)
-                 .WithName(nameof(HandleGoogleCallback))
+            group.MapGet("/signin/google/callback", SignInWithGoogleCallback)
+                 .WithName(nameof(SignInWithGoogleCallback))
                  .WithSummary("Handle Google sign-in callback")
                  .WithDescription("Handles the Google OAuth callback, authenticating the user or creating a new account if one does not exist.");
 
@@ -89,14 +89,24 @@ namespace MySolution.WebApi.Endpoints
             return accountService.SignInWithRefreshTokenAsync(form);
         }
 
-        public static Task<Results<ChallengeHttpResult, ProblemHttpResult>> SignInWithGoogle(
+        public static async Task<Results<Ok<SignInWithProviderModel>, ProblemHttpResult>> SignInWithGoogle(
             IAccountService accountService,
-            [FromQuery] string returnUrl)
+            LinkGenerator linkGenerator,
+            HttpContext httpContext,
+            string returnUrl)
         {
-            return accountService.SignInWithProviderAsync("Google", returnUrl);
+            var callbackUrl = linkGenerator.GetUriByName(httpContext, nameof(SignInWithGoogleCallback), new
+            {
+                ReturnUrl = returnUrl
+            });
+
+            if (callbackUrl is null)
+                return TypedResults.Problem(title: "Unable to generate Google callback URL.");
+
+            return await accountService.SignInWithProviderAsync("Google", callbackUrl);
         }
 
-        public static Task<Results<Ok<AccountModel>, ValidationProblem, ProblemHttpResult>> HandleGoogleCallback(
+        public static Task<Results<Ok<AccountModel>, ValidationProblem, ProblemHttpResult>> SignInWithGoogleCallback(
             IAccountService accountService)
         {
             return accountService.SignInWithProviderCallbackAsync("Google");
