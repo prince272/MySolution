@@ -41,7 +41,7 @@ namespace MySolution.WebApi.Services.Accounts.Models
                         if (user.LockoutEndAt.HasValue && user.LockoutEndAt.Value > now)
                         {
                             var remaining = user.LockoutEndAt.Value - now;
-                            context.AddFailure(context.PropertyPath, $"Account is locked. Try again in {remaining.Humanize(precision: 2, minUnit: TimeUnit.Second)}.");
+                            context.AddFailure(context.PropertyPath, $"Account is locked. Please try again in {remaining.Humanize(precision: 2, minUnit: TimeUnit.Second)}.");
                             return;
                         }
                     }

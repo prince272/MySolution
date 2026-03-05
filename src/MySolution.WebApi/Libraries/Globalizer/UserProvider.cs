@@ -24,11 +24,19 @@ namespace MySolution.WebApi.Libraries.Globalizer
 
         private HttpContext? HttpContext => _httpContextAccessor.HttpContext;
 
-        public override string? Id => HttpContext?.User?.FindFirstValue("sub");
+        public override string? Id => HttpContext?.User?.GetSubject();
         public override string? UserAgent => HttpContext?.Request?.Headers.UserAgent.ToString() is { Length: > 0 } ua ? ua : null;
         public override string? IpAddress => HttpContext?.Connection?.RemoteIpAddress?.ToString();
 
         [MemberNotNullWhen(true, nameof(Id))]
         public override bool IsAuthenticated => HttpContext?.User?.Identity?.IsAuthenticated ?? false;
+    }
+
+    public static class ClaimsPrincipalExtensions
+    {
+        public static string? GetSubject(this ClaimsPrincipal principal)
+        {
+            return principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        }
     }
 }

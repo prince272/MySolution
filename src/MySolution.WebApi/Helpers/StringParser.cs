@@ -12,9 +12,7 @@ namespace MySolution.WebApi.Helpers
         private static readonly PhoneNumberUtil _phoneUtil = PhoneNumberUtil.GetInstance();
         private static readonly Parser _uaParser = Parser.GetDefault();
 
-        public record EmailInfo(string Address, string LocalPart, string Domain);
         public record PhoneInfo(string E164, string CountryCode, string NationalNumber, PhoneNumberType NumberType);
-        public record IpAddressInfo(string Address, IpAddressFamily Family, bool IsLoopback, bool IsPrivate);
         public record UserAgentInfo(string Browser, string BrowserVersion, string Os, string OsVersion, string Device, DeviceType DeviceType);
 
         [GeneratedRegex(@"^[-+0-9() ]+$", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
@@ -56,19 +54,14 @@ namespace MySolution.WebApi.Helpers
             return contactType.Value;
         }
 
-        public static bool TryParseEmail(string? input, [NotNullWhen(true)] out EmailInfo? info)
+        public static bool TryParseEmail(string? input, [NotNullWhen(true)] out MailAddress? mailAddress)
         {
-            info = null;
+            mailAddress = null;
             if (string.IsNullOrWhiteSpace(input)) return false;
             try
             {
                 var mail = new MailAddress(input.Trim());
-                var localPart = mail.User.ToLowerInvariant();
-                var domain = mail.Host.ToLowerInvariant();
-                info = new EmailInfo(
-                    Address: $"{localPart}@{domain}",
-                    LocalPart: localPart,
-                    Domain: domain);
+                mailAddress = new MailAddress($"{mail.User.ToLowerInvariant()}@{mail.Host.ToLowerInvariant()}");
                 return true;
             }
             catch (FormatException) { return false; }
@@ -92,18 +85,36 @@ namespace MySolution.WebApi.Helpers
             catch (NumberParseException) { return false; }
         }
 
-        public static bool TryParseIpAddress(string? input, [NotNullWhen(true)] out IpAddressInfo? info)
+        public static bool TryParseIpAddress(string? input, [NotNullWhen(true)] out IPAddress? ipAddress)
         {
-            info = null;
+            ipAddress = null;
             if (string.IsNullOrWhiteSpace(input)) return false;
-            if (!IPAddress.TryParse(input.Trim(), out var ip)) return false;
-            info = new IpAddressInfo(
-                Address: ip.ToString(),
-                Family: ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
-                    ? IpAddressFamily.IPv6
-                    : IpAddressFamily.IPv4,
-                IsLoopback: IPAddress.IsLoopback(ip),
-                IsPrivate: IsPrivateIp(ip));
+            if (!IPAddress.TryParse(input.Trim(), out ipAddress)) return false;
+            return true;
+        }
+
+        public static bool TryParseUrl(string? input, [NotNullWhen(true)] out Uri? uri)
+        {
+            uri = null;
+            if (string.IsNullOrWhiteSpace(input)) return false;
+            if (!Uri.TryCreate(input.Trim(), UriKind.Absolute, out uri)) return false;
+            if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            {
+                uri = null;
+                return false;
+            }
+            return true;
+        }
+
+        public static bool TryParseUrlWithAllowedOrigins(string? input, IEnumerable<string> allowedOrigins, [NotNullWhen(true)] out Uri? uri)
+        {
+            uri = null;
+            if (!TryParseUrl(input, out uri)) return false;
+            if (!allowedOrigins.Contains(uri.GetLeftPart(UriPartial.Authority), StringComparer.OrdinalIgnoreCase))
+            {
+                uri = null;
+                return false;
+            }
             return true;
         }
 
@@ -176,29 +187,16 @@ namespace MySolution.WebApi.Helpers
                 (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
                 (bytes[0] == 192 && bytes[1] == 168));
         }
+
+        public static bool IsPrivateIpAddress(this IPAddress ip) => IsPrivateIp(ip);
+        public static bool IsLoopbackIpAddress(this IPAddress ip) => IPAddress.IsLoopback(ip);
+        public static IpAddressFamily GetIpAddressFamily(this IPAddress ip) =>
+            ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6
+                ? IpAddressFamily.IPv6
+                : IpAddressFamily.IPv4;
     }
 
-    public enum ContactType
-    {
-        Email,
-        PhoneNumber
-    }
-
-    public enum IpAddressFamily
-    {
-        IPv4,
-        IPv6
-    }
-
-    public enum DeviceType
-    {
-        Desktop,
-        Mobile,
-        Tablet,
-        TV,
-        Console,
-        Wearable,
-        Spider,
-        Unknown
-    }
+    public enum ContactType { Email, PhoneNumber }
+    public enum IpAddressFamily { IPv4, IPv6 }
+    public enum DeviceType { Desktop, Mobile, Tablet, TV, Console, Wearable, Spider, Unknown }
 }

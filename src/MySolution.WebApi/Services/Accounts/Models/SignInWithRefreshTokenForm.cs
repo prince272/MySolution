@@ -1,4 +1,5 @@
 ﻿using FluentValidation;
+using MySolution.WebApi.Libraries.Globalizer;
 using MySolution.WebApi.Libraries.JwtTokenProvider;
 using MySolution.WebApi.Services.Accounts.Entities;
 using MySolution.WebApi.Services.Accounts.Repositories;

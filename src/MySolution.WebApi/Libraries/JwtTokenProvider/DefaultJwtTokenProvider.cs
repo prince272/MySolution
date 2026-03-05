@@ -107,7 +107,7 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
                 _logger.LogInformation("Validating refresh token...");
 
                 var tokenHandler = new JwtSecurityTokenHandler();
-                tokenHandler.MapInboundClaims = false;
+                tokenHandler.MapInboundClaims = true;
 
                 var key = Encoding.UTF8.GetBytes(_options.Secret);
 
@@ -127,8 +127,8 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
 
                     ValidTypes = [JwtTokenTypes.RefreshToken],
 
-                    NameClaimType = JwtRegisteredClaimNames.Sub,
-                    RoleClaimType = "role",
+                    NameClaimType = ClaimTypes.Name,
+                    RoleClaimType = ClaimTypes.Role
                 };
 
                 var principal = tokenHandler.ValidateToken(refreshToken, validationParameters, out var validatedToken);

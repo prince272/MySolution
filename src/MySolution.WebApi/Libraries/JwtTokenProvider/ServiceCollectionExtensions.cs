@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using MySolution.WebApi.Libraries.Globalizer;
 using MySolution.WebApi.Services.Accounts;
+using System.Security.Claims;
 using System.Text;
 
 namespace MySolution.WebApi.Libraries.JwtTokenProvider
@@ -32,7 +34,7 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
                 {
                     var tokenOptions = tokenOptionsAccessor.Value;
 
-                    jwtOptions.MapInboundClaims = false;
+                    jwtOptions.MapInboundClaims = true;
                     jwtOptions.TokenValidationParameters = new TokenValidationParameters
                     {
                         ValidateIssuer = true,
@@ -47,8 +49,8 @@ namespace MySolution.WebApi.Libraries.JwtTokenProvider
                         ValidateLifetime = true,
                         ClockSkew = TimeSpan.Zero,
 
-                        NameClaimType = JwtRegisteredClaimNames.Sub,
-                        RoleClaimType = "role",
+                        NameClaimType = ClaimTypes.Name,
+                        RoleClaimType = ClaimTypes.Role,
 
                         ValidTypes = [JwtTokenTypes.AccessToken]
                     };

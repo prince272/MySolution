@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -123,39 +124,39 @@ namespace MySolution.WebApi.Helpers
             return Convert.ToBase64String(tokenBytes);
         }
 
-        public static TokenPayload<T> ValidateToken<T>(string secret, string token)
-            => ValidateTokenWithOptions<T>(secret, token, DateTimeOffset.UtcNow, DefaultTokenHashAlgorithm);
+        public static bool ValidateToken<T>(string secret, string token, [NotNullWhen(true)] out TokenPayload<T>? payload)
+            => ValidateTokenWithOptions(secret, token, DateTimeOffset.UtcNow, DefaultTokenHashAlgorithm, out payload);
 
-        public static TokenPayload<T> ValidateTokenWithTime<T>(string secret, string token, DateTimeOffset timestamp)
-            => ValidateTokenWithOptions<T>(secret, token, timestamp, DefaultTokenHashAlgorithm);
+        public static bool ValidateTokenWithTime<T>(string secret, string token, DateTimeOffset timestamp, [NotNullWhen(true)] out TokenPayload<T>? payload)
+            => ValidateTokenWithOptions(secret, token, timestamp, DefaultTokenHashAlgorithm, out payload);
 
-        public static TokenPayload<T> ValidateTokenWithOptions<T>(string secret, string token, DateTimeOffset timestamp, string hashAlgorithm = DefaultTokenHashAlgorithm)
+        public static bool ValidateTokenWithOptions<T>(string secret, string token, DateTimeOffset timestamp, string hashAlgorithm, [NotNullWhen(true)] out TokenPayload<T>? payload)
         {
-            byte[] secretBytes = Encoding.UTF8.GetBytes(secret);
+            payload = null;
 
+            byte[] secretBytes = Encoding.UTF8.GetBytes(secret);
             byte[] raw;
             try { raw = Convert.FromBase64String(token); }
-            catch { throw new ArgumentException("Invalid base64 token."); }
+            catch { return false; }
 
             int hmacSize = GetHmacSize(hashAlgorithm);
             if (raw.Length < hmacSize)
-                throw new ArgumentException("Token too short.");
+                return false;
 
             byte[] data = raw[..^hmacSize];
             byte[] sig = raw[^hmacSize..];
-
             byte[] expectedSig = Sign(data, secretBytes, hashAlgorithm);
-            if (!CryptographicOperations.FixedTimeEquals(sig, expectedSig))
-                throw new ArgumentException("Invalid signature.");
 
-            TokenPayload<T> payload;
+            if (!CryptographicOperations.FixedTimeEquals(sig, expectedSig))
+                return false;
+
             try { payload = JsonSerializer.Deserialize<TokenPayload<T>>(data)!; }
-            catch { throw new ArgumentException("Invalid payload."); }
+            catch { return false; }
 
             if (timestamp > payload.Expiry)
-                throw new InvalidOperationException("Token expired.");
+                return false;
 
-            return payload;
+            return true;
         }
 
         #endregion
